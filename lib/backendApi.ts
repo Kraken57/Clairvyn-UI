@@ -1,5 +1,15 @@
-const API_BASE_URL =
-  typeof window === "undefined" ? process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000" : ""
+/** Base URL of the Flask backend. Use in browser and server so all API calls hit the backend. */
+export const API_BASE_URL =
+  typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000"
+    : process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000"
+
+/** Return full URL for a path (e.g. for images or logout that need the backend origin). */
+export function getBackendUrl(path: string): string {
+  const base = API_BASE_URL.replace(/\/$/, "")
+  const p = path.startsWith("/") ? path : `/${path}`
+  return `${base}${p}`
+}
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
@@ -14,7 +24,7 @@ export async function apiFetch<TResponse, TBody = unknown>(
   path: string,
   { method = "GET", body, token, signal }: ApiFetchOptions<TBody>
 ): Promise<TResponse> {
-  const url = `${API_BASE_URL}${path}`
+  const url = getBackendUrl(path)
 
   const headers: Record<string, string> = {}
 

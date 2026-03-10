@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -52,7 +52,68 @@ import {
   getUserChatSessions,
   getChatMessages
 } from "@/lib/chat-service"
-import { apiFetch } from "@/lib/backendApi"
+import { apiFetch, getBackendUrl } from "@/lib/backendApi"
+
+/** Fetches image with Bearer token and displays via blob URL (for auth-protected backend images). */
+function AuthImage({
+  src,
+  alt,
+  className,
+  getToken,
+}: {
+  src: string
+  alt: string
+  className?: string
+  getToken: () => Promise<string | null>
+}) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null)
+  const [error, setError] = useState(false)
+  const blobUrlRef = useRef<string | null>(null)
+
+  const getTokenRef = useRef(getToken)
+  getTokenRef.current = getToken
+
+  useEffect(() => {
+    if (!src) return
+    let cancelled = false
+    setError(false)
+    getTokenRef
+      .current()
+      .then((token) => {
+        if (!token || cancelled) return
+        return fetch(src, { headers: { Authorization: `Bearer ${token}` } })
+      })
+      .then((res) => {
+        if (!res?.ok || cancelled) {
+          if (res && !res.ok) setError(true)
+          return null
+        }
+        return res!.blob()
+      })
+      .then((blob) => {
+        if (!blob || cancelled) return
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+        const url = URL.createObjectURL(blob)
+        blobUrlRef.current = url
+        setObjectUrl(url)
+      })
+      .catch(() => !cancelled && setError(true))
+
+    return () => {
+      cancelled = true
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = null
+      }
+      setObjectUrl(null)
+    }
+  }, [src])
+
+  if (error) return <span className={className}>Failed to load image</span>
+  if (!objectUrl) return <span className={className}>Loading...</span>
+  return <img src={objectUrl} alt={alt} className={className} />
+}
+
 export default function ChatbotPage() {
   const { user, logout, loading: authLoading, isGuest, getIdToken } = useAuth()
   const { isDarkMode, toggleDarkMode } = useTheme()
@@ -206,7 +267,7 @@ export default function ChatbotPage() {
     }
 
     try {
-      const data = await apiFetch<{ id: string; title: string | null; metadata: any }>(
+      const data = await apiFetch<{ id: string | number; title: string | null; metadata: any }>(
         "/api/chats",
         {
           method: "POST",
@@ -214,13 +275,13 @@ export default function ChatbotPage() {
           token,
         }
       )
-      // if we already have a local chat id that differs, migrate it
-      if (currentChatId && currentChatId !== data.id) {
-        await renameChatSession(currentChatId, data.id)
-        setCurrentChatId(data.id)
+      const backendId = String(data.id)
+      if (currentChatId && currentChatId !== backendId) {
+        await renameChatSession(currentChatId, backendId)
+        setCurrentChatId(backendId)
       }
-      setBackendChatId(data.id)
-      return data.id
+      setBackendChatId(backendId)
+      return backendId
     } catch (err) {
       console.error("Failed to create backend chat session:", err)
       // leave backendChatId null so we can retry later
@@ -340,11 +401,11 @@ export default function ChatbotPage() {
       }
 
       // if backend returned chat_id we can cache it
-      if (data.chat_id) {
-        setBackendChatId(data.chat_id)
+      if (data.chat_id != null) {
+        setBackendChatId(String(data.chat_id))
       }
 
-      // replace messages with server history if present
+      // Replace messages with server history (backend returns history array)
       const raw: any = data;
       const array: any[] = Array.isArray(raw?.history)
         ? raw.history
@@ -352,9 +413,14 @@ export default function ChatbotPage() {
         ? raw.messages
         : [];
       const updatedHistory: ChatMessage[] = array.map((m: any) => ({
-        ...m,
+        role: m.sender_type === "user" ? "user" : "assistant",
+        content: m.content ?? "",
         timestamp:
-          typeof m.timestamp === "string" ? m.timestamp : (m.timestamp as Date).toISOString(),
+          typeof m.created_at === "string"
+            ? m.created_at
+            : (m.created_at as Date)?.toISOString?.() ?? new Date().toISOString(),
+        image_url: m.image_url ?? undefined,
+        extra_data: m.extra_data ?? undefined,
       }));
 
       if (currentChatId) {
@@ -362,6 +428,16 @@ export default function ChatbotPage() {
       }
 
       setMessages(updatedHistory)
+
+      // Optimistically set chat title in sidebar from first user message
+      if (currentChatId) {
+        const titleFromMessage = userText.slice(0, 80).trim() || "New chat"
+        setChatSessions((prev) =>
+          prev.map((s) =>
+            s.id === currentChatId ? { ...s, title: s.title ?? titleFromMessage } : s
+          )
+        )
+      }
     } catch (error: any) {
       console.error("Error sending message:", error)
       let content = "I'm sorry, I encountered an error. Please try again."
@@ -385,13 +461,39 @@ export default function ChatbotPage() {
     }
   }
 
+  const downloadDxf = async (documentId: string) => {
+    const chatId = backendChatId ?? currentChatId
+    if (!chatId) return
+    const token = await getIdToken()
+    if (!token) return
+    try {
+      const url = getBackendUrl(`/api/chats/${encodeURIComponent(chatId)}/files/${documentId}.dxf`)
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) throw new Error(res.statusText)
+      const blob = await res.blob()
+      const href = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = href
+      a.download = `${documentId}.dxf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(href)
+    } catch (e) {
+      console.error("DXF download failed", e)
+    }
+  }
+
   const handleLogout = async () => {
     try {
       const idToken = await getIdToken()
-      await fetch("/api/logout", {
+      await fetch(getBackendUrl("/api/logout"), {
         method: "POST",
-        headers: { Authorization: `Bearer ${idToken}` }
-      });
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+      })
       await logout()
       router.push("/")
     } catch (error) {
@@ -878,7 +980,7 @@ export default function ChatbotPage() {
                         <div className="space-y-2">
                           {chatSessions.map((session) => {
                             const firstUserMessage = session.messages.find((m) => m.role === "user")
-                            const preview = firstUserMessage?.content?.slice(0, 50) || "New chat"
+                            const preview = session.title ?? firstUserMessage?.content?.slice(0, 50) ?? "New chat"
                             const displayPreview = preview.length >= 50 ? `${preview}...` : preview
                             const isActive = session.id === currentChatId
 
@@ -953,35 +1055,30 @@ export default function ChatbotPage() {
                 >
                   <p className="text-sm sm:text-base leading-relaxed">{message.content}</p>
                   {/* Support for image/extra data and description (demo script + backend responses) */}
-                  {(message as any).image || (message as any).image_url || (message as any).extra_data?.png_url || (message as any).extra_data?.dxf_url ? (
+                  {(message as any).image || (message as any).image_url || (message as any).extra_data?.png_url || (message as any).extra_data?.dxf_url || (message as any).extra_data?.document_id ? (
                     <div className="mt-3 space-y-2">
-                      {((message as any).image || (message as any).image_url) && (
-                        <img
-                          src={(message as any).image || (message as any).image_url}
-                          alt="Generated"
-                          className="rounded-lg shadow-md border max-w-full h-auto"
-                        />
-                      )}
-                      {((message as any).extra_data?.png_url || (message as any).extra_data?.dxf_url) && (
-                        <div className="flex flex-col gap-2">
-                          {((message as any).extra_data?.png_url) && (
-                            <img
-                              src={(message as any).extra_data.png_url}
-                              alt="Preview"
-                              className="rounded-lg shadow-md border max-w-full h-auto"
-                            />
-                          )}
-                          {((message as any).extra_data?.dxf_url) && (
-                            <a
-                              href={(message as any).extra_data.dxf_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-teal-600 underline"
-                            >
-                              Download DXF file
-                            </a>
-                          )}
-                        </div>
+                      {(() => {
+                        const imgUrl = (message as any).extra_data?.png_url ?? (message as any).image_url ?? (message as any).image
+                        if (!imgUrl) return null
+                        const fullUrl = typeof imgUrl === "string" && imgUrl.startsWith("/") ? getBackendUrl(imgUrl) : imgUrl
+                        const needsAuth = typeof fullUrl === "string" && fullUrl.includes("/api/chats/") && fullUrl.includes("/files/")
+                        const imgClassName = "rounded-lg shadow-md border max-w-full h-auto"
+                        return needsAuth ? (
+                          <AuthImage src={fullUrl} alt="Floor plan" className={imgClassName} getToken={getIdToken} />
+                        ) : (
+                          <img src={fullUrl} alt="Floor plan" className={imgClassName} />
+                        )
+                      })()}
+                      {((message as any).extra_data?.dxf_url || (message as any).extra_data?.document_id) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-fit text-teal-600 dark:text-teal-400 border-teal-300 dark:border-teal-700"
+                          onClick={() => downloadDxf((message as any).extra_data?.document_id || (message as any).extra_data?.dxf_url?.split("/").pop()?.replace(".dxf", "") || "floorplan")}
+                        >
+                          Download DXF file
+                        </Button>
                       )}
 
                       {(message as any).description && (

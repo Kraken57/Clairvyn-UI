@@ -5,11 +5,23 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string | Date;
+  /** Backend: image_url on message or inside extra_data */
+  image_url?: string | null;
+  /** Backend: document_id, png_url, dxf_url, spec, layout, etc. */
+  extra_data?: {
+    document_id?: string;
+    png_url?: string | null;
+    dxf_url?: string | null;
+    spec?: unknown;
+    layout?: unknown;
+    validation_report?: unknown;
+  } | null;
 }
 
 export interface ChatSession {
   id: string;
   userId: string;
+  title?: string | null;
   messages: Message[];
   createdAt: Date;
   updatedAt: Date;
@@ -136,25 +148,22 @@ export const getChatMessages = async (chatId: string, token?: string): Promise<M
   if (token) {
     try {
       console.debug('fetching messages from backend', chatId);
-      // new spec exposes /messages endpoint
       const data = await apiFetch<any>(
         `/api/chats/${encodeURIComponent(chatId)}/messages`,
         { method: "GET", token }
       );
       console.debug('raw history response', data);
-      // normalize the array whether backend named it history or messages
-      const array: any[] = Array.isArray(data?.history)
-        ? data.history
-        : Array.isArray(data?.messages)
-        ? data.messages
-        : [];
-      // make sure timestamps are normalized
-      const hist = array.map((m) => ({
-        ...m,
+      // Backend returns array of messages directly
+      const array: any[] = Array.isArray(data) ? data : [];
+      const hist: Message[] = array.map((m) => ({
+        role: m.sender_type === "user" ? "user" : "assistant",
+        content: m.content ?? "",
         timestamp:
-          typeof m.timestamp === "string"
-            ? m.timestamp
-            : (m.timestamp as Date).toISOString(),
+          typeof m.created_at === "string"
+            ? m.created_at
+            : (m.created_at as Date)?.toISOString?.() ?? new Date().toISOString(),
+        image_url: m.image_url ?? undefined,
+        extra_data: m.extra_data ?? undefined,
       }));
       console.debug('received history from backend', hist);
       return hist;
@@ -193,18 +202,10 @@ export const getUserChatSessions = async (
       console.log('raw sessions response from backend', backendSessions);
       // normalize the shape and sort by updatedAt
       const converted: ChatSession[] = backendSessions.map((s) => ({
-        id: s.id,
+        id: String(s.id),
         userId,
-        messages: Array.isArray(s.messages)
-          ? s.messages.map((m: any) => ({
-              role: m.role,
-              content: m.content,
-              timestamp:
-                typeof m.timestamp === "string"
-                  ? m.timestamp
-                  : (m.timestamp as Date).toISOString(),
-            }))
-          : [],
+        title: s.title ?? null,
+        messages: [], // Backend list does not include messages; load via getChatMessages when opening a chat
         createdAt: new Date(s.created_at || s.createdAt || Date.now()),
         updatedAt: new Date(s.updated_at || s.updatedAt || Date.now()),
       }));
