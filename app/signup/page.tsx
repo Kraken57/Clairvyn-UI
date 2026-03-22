@@ -1,16 +1,19 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
+import { ONBOARDING_SESSION_KEY } from "@/lib/onboardingConstants"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Eye, EyeOff, Home, Lock, Mail } from "lucide-react"
+import { TermsOfServiceModal } from "@/components/TermsOfServiceModal"
+import { Eye, EyeOff, Home } from "lucide-react"
 
 function GoogleMark() {
   return (
@@ -35,15 +38,18 @@ function GoogleMark() {
   )
 }
 
-export default function SignInPage() {
+export default function SignUpPage() {
+  const [name, setName] = useState("")
   const [email, setEmail] = useState("")
+  const [university, setUniversity] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [rememberMe, setRememberMe] = useState(true)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [termsOpen, setTermsOpen] = useState(false)
 
-  const { signIn, signInWithGoogle } = useAuth()
+  const { signUp, signInWithGoogle } = useAuth()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,7 +58,23 @@ export default function SignInPage() {
     setError("")
 
     try {
-      await signIn(email, password, rememberMe)
+      if (!name.trim()) {
+        setError("Please enter your name.")
+        return
+      }
+      if (!university) {
+        setError("Please enter your university.")
+        return
+      }
+      if (!acceptedTerms) {
+        setError("Please accept the Terms and Conditions to continue.")
+        return
+      }
+
+      await signUp(email, password)
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(ONBOARDING_SESSION_KEY, "1")
+      }
       router.push("/chatbot")
     } catch (error: any) {
       setError(error.message || "An error occurred")
@@ -66,7 +88,14 @@ export default function SignInPage() {
     setError("")
 
     try {
-      await signInWithGoogle({ rememberMe })
+      if (!acceptedTerms) {
+        setError("Please accept the Terms and Conditions to continue.")
+        return
+      }
+      await signInWithGoogle()
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(ONBOARDING_SESSION_KEY, "1")
+      }
       router.push("/chatbot")
     } catch (error: any) {
       setError(error.message || "An error occurred")
@@ -80,7 +109,8 @@ export default function SignInPage() {
       <div className="absolute inset-0 bg-[url('/login_bg.png')] bg-cover bg-center" />
       <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/65 to-white/20" />
       {/* Backdrop blur only on the right half of the screen */}
-      <div className="hidden md:block absolute right-0 top-0 h-full w-1/2 bg-white/25 backdrop-blur-lg"
+      <div
+        className="hidden md:block absolute right-0 top-0 h-full w-1/2 bg-white/25 backdrop-blur-lg"
         style={{
           WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,1) 100%)",
           maskImage: "linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,1) 100%)",
@@ -98,31 +128,60 @@ export default function SignInPage() {
           <div className="p-6 sm:p-8">
             <div>
               <h1 className="text-[#1E3A8A] text-3xl sm:text-[30px] font-bold leading-tight">
-                Sign In
+                Sign up
               </h1>
               <p className="text-sm text-gray-600 mt-2">
-                Please login to continue to your account.
+                Sign up to enjoy the features of Clairvyn AI
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
+                <Label htmlFor="name" className="sr-only">
+                  Your Name
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-12 rounded-xl bg-white/80 border-gray-200 focus-visible:ring-teal-500 placeholder:text-gray-500"
+                  placeholder="Your Name"
+                  required
+                  autoComplete="name"
+                />
+              </div>
+
+              <div>
                 <Label htmlFor="email" className="sr-only">
                   Email
                 </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 pr-4 h-12 rounded-xl bg-white/80 border-gray-200 focus-visible:ring-teal-500"
-                    placeholder="Email"
-                    required
-                    autoComplete="email"
-                  />
-                </div>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-12 rounded-xl bg-white/80 border-gray-200 focus-visible:ring-teal-500 placeholder:text-gray-500"
+                  placeholder="Email"
+                  required
+                  autoComplete="email"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="university" className="sr-only">
+                  University
+                </Label>
+                <Input
+                  id="university"
+                  type="text"
+                  value={university}
+                  onChange={(e) => setUniversity(e.target.value)}
+                  className="h-12 rounded-xl bg-white/80 border-gray-200 focus-visible:ring-teal-500 placeholder:text-gray-500"
+                  placeholder="University"
+                  required
+                  autoComplete="organization"
+                />
               </div>
 
               <div>
@@ -130,16 +189,15 @@ export default function SignInPage() {
                   Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-12 h-12 rounded-xl bg-white/80 border-gray-200 focus-visible:ring-teal-500"
+                    className="pr-12 h-12 rounded-xl bg-white/80 border-gray-200 focus-visible:ring-teal-500 placeholder:text-gray-500"
                     placeholder="Password"
                     required
-                    autoComplete="current-password"
+                    autoComplete="new-password"
                   />
                   <button
                     type="button"
@@ -156,23 +214,36 @@ export default function SignInPage() {
                 </div>
               </div>
 
-              <div className="flex items-center">
-                <label className="inline-flex items-center gap-2 text-sm text-gray-600 select-none">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-teal-700 focus:ring-teal-500"
-                  />
-                  Keep me logged in
-                </label>
-              </div>
-
               {error && (
                 <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl border border-red-100">
                   {error}
                 </div>
               )}
+
+              <div className="flex items-start gap-3 rounded-xl border border-gray-100 bg-white/60 p-3">
+                <Checkbox
+                  id="accept-terms"
+                  checked={acceptedTerms}
+                  onCheckedChange={(checked) => {
+                    setAcceptedTerms(checked === true)
+                    if (checked) setError("")
+                  }}
+                  className="mt-0.5 h-5 w-5 shrink-0 rounded-md border-2 border-[#1E3A8A] data-[state=checked]:bg-[#1E3A8A] data-[state=checked]:border-[#1E3A8A] data-[state=checked]:text-white"
+                />
+                <p className="text-sm leading-snug text-gray-700">
+                  <label htmlFor="accept-terms" className="cursor-pointer">
+                    By registering, you agree to our{" "}
+                  </label>
+                  <button
+                    type="button"
+                    className="font-semibold text-[#1E3A8A] underline underline-offset-2 hover:text-[#1e40af] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] rounded"
+                    onClick={() => setTermsOpen(true)}
+                  >
+                    Terms and Conditions
+                  </button>
+                  <span className="text-gray-700">.</span>
+                </p>
+              </div>
 
               <Button
                 type="submit"
@@ -184,7 +255,7 @@ export default function SignInPage() {
                     <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   </span>
                 ) : (
-                  "Sign In"
+                  "Sign up"
                 )}
               </Button>
             </form>
@@ -208,14 +279,16 @@ export default function SignInPage() {
             </div>
 
             <p className="mt-6 text-center text-sm text-gray-500">
-              Don't have an account?{" "}
-              <Link href="/signup" className="text-[#1E3A8A] font-semibold hover:underline">
-                Sign Up
+              Already have an account?{" "}
+              <Link href="/signin" className="text-[#1E3A8A] font-semibold hover:underline">
+                Sign In
               </Link>
             </p>
           </div>
         </div>
       </div>
+
+      <TermsOfServiceModal open={termsOpen} onClose={() => setTermsOpen(false)} />
     </div>
   )
 }

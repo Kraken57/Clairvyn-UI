@@ -1,20 +1,66 @@
 import { v4 as uuidv4 } from 'uuid';
+import { apiFetch } from "./backendApi";
 
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string | Date;
+  /** Backend: image_url on message or inside extra_data */
+  image_url?: string | null;
+  /** Backend: document_id, png_url, dxf_url, spec, layout, etc. */
+  extra_data?: {
+    document_id?: string;
+    png_url?: string | null;
+    dxf_url?: string | null;
+    spec?: unknown;
+    layout?: unknown;
+    validation_report?: unknown;
+  } | null;
 }
 
 export interface ChatSession {
   id: string;
   userId: string;
+  title?: string | null;
   messages: Message[];
   createdAt: Date;
   updatedAt: Date;
 }
 
 const STORAGE_KEY = 'clairvyn_chat_sessions';
+
+/** Per-user last opened chat id (survives full page refresh). */
+const LAST_ACTIVE_CHAT_BY_USER_KEY = 'clairvyn_last_active_chat_by_user';
+
+function readLastActiveChatMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(LAST_ACTIVE_CHAT_BY_USER_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, string>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getLastActiveChatId(userId: string): string | null {
+  const id = readLastActiveChatMap()[userId];
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+export function setLastActiveChatId(userId: string, chatId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const map = readLastActiveChatMap();
+    map[userId] = chatId;
+    localStorage.setItem(LAST_ACTIVE_CHAT_BY_USER_KEY, JSON.stringify(map));
+  } catch (error) {
+    console.error('[Clairvyn:chat] setLastActiveChatId error', error);
+  }
+}
 
 // Helper to get sessions from local storage
 const getSessionsFromStorage = (): ChatSession[] => {
@@ -24,7 +70,7 @@ const getSessionsFromStorage = (): ChatSession[] => {
     if (!stored) return [];
     const sessions = JSON.parse(stored);
     // Restore Date objects
-    return sessions.map((session: any) => ({
+    const restored = sessions.map((session: any) => ({
       ...session,
       createdAt: new Date(session.createdAt),
       updatedAt: new Date(session.updatedAt),
@@ -33,6 +79,8 @@ const getSessionsFromStorage = (): ChatSession[] => {
         timestamp: new Date(msg.timestamp)
       }))
     }));
+    console.debug('Loaded sessions from localStorage', restored);
+    return restored;
   } catch (error) {
     console.error('Error parsing chat sessions:', error);
     return [];
@@ -49,12 +97,15 @@ const saveSessionsToStorage = (sessions: ChatSession[]) => {
   }
 };
 
-// Create a new chat session
-export const createChatSession = async (userId: string): Promise<string> => {
+// Create a new chat session, optionally specifying the ID (useful when syncing with backend)
+export const createChatSession = async (
+  userId: string,
+  forcedId?: string
+): Promise<string> => {
   try {
     const sessions = getSessionsFromStorage();
     const newSession: ChatSession = {
-      id: uuidv4(),
+      id: forcedId || uuidv4(),
       userId,
       messages: [],
       createdAt: new Date(),
@@ -63,10 +114,36 @@ export const createChatSession = async (userId: string): Promise<string> => {
 
     sessions.push(newSession);
     saveSessionsToStorage(sessions);
+    console.log("[Clairvyn:chat] createChatSession", { id: newSession.id, forcedId: !!forcedId });
     return newSession.id;
   } catch (error) {
-    console.error('Error creating chat session:', error);
+    console.error("[Clairvyn:chat] createChatSession error", error);
     throw error;
+  }
+};
+
+// Rename an existing local session (used when a backend chat ID is assigned)
+export const renameChatSession = async (
+  oldId: string,
+  newId: string
+): Promise<void> => {
+  try {
+    const sessions = getSessionsFromStorage();
+    const idx = sessions.findIndex((s) => s.id === oldId);
+    if (idx === -1) return;
+    // avoid collision if newId already exists
+    const exists = sessions.find((s) => s.id === newId);
+    if (exists) {
+      // merge messages if necessary
+      sessions[idx].messages.forEach((m) => exists.messages.push(m));
+      // remove old entry
+      sessions.splice(idx, 1);
+    } else {
+      sessions[idx].id = newId;
+    }
+    saveSessionsToStorage(sessions);
+  } catch (error) {
+    console.error('Error renaming chat session:', error);
   }
 };
 
@@ -99,33 +176,111 @@ export const addMessageToChat = async (
 };
 
 // Get messages for a chat session
-export const getChatMessages = async (chatId: string): Promise<Message[]> => {
+export const getChatMessages = async (chatId: string, token?: string): Promise<Message[]> => {
+  console.log("[Clairvyn:chat] getChatMessages", { chatId, hasToken: !!token });
+  if (token) {
+    try {
+      const data = await apiFetch<any>(
+        `/api/chats/${encodeURIComponent(chatId)}/messages`,
+        { method: "GET", token }
+      );
+      const array: any[] = Array.isArray(data) ? data : [];
+      const hist: Message[] = array.map((m) => ({
+        role: m.sender_type === "user" ? "user" : "assistant",
+        content: m.content ?? "",
+        timestamp:
+          typeof m.created_at === "string"
+            ? m.created_at
+            : (m.created_at as Date)?.toISOString?.() ?? new Date().toISOString(),
+        image_url: m.image_url ?? undefined,
+        extra_data: m.extra_data ?? undefined,
+      }));
+      console.log("[Clairvyn:chat] getChatMessages → backend", { chatId, count: hist.length });
+      return hist;
+    } catch (err) {
+      console.warn("[Clairvyn:chat] getChatMessages backend failed, using local", { chatId, err });
+    }
+  }
+
   try {
     const sessions = getSessionsFromStorage();
-    const session = sessions.find(s => s.id === chatId);
-    return session ? session.messages : [];
+    const session = sessions.find((s) => s.id === chatId);
+    const messages = session ? session.messages : [];
+    console.log("[Clairvyn:chat] getChatMessages → local", { chatId, count: messages.length });
+    return messages;
   } catch (error) {
-    console.error('Error getting chat messages:', error);
+    console.error("[Clairvyn:chat] getChatMessages error", { chatId, error });
     return [];
   }
 };
 
+/** Load messages for a chat (backend when token works, else local). */
+export async function loadMessagesForChat(
+  chatId: string,
+  token: string | null | undefined
+): Promise<{ messages: Message[]; fromBackend: boolean }> {
+  if (token) {
+    try {
+      const sessionMessages = await getChatMessages(chatId, token);
+      return { messages: sessionMessages, fromBackend: true };
+    } catch (err) {
+      console.warn("[Clairvyn:chat] loadMessagesForChat backend failed, using local", { chatId, err });
+    }
+  }
+  const sessionMessages = await getChatMessages(chatId);
+  return { messages: sessionMessages, fromBackend: false };
+}
+
 // Get all chat sessions for a user
-export const getUserChatSessions = async (userId: string): Promise<ChatSession[]> => {
+export const getUserChatSessions = async (
+  userId: string,
+  token?: string
+): Promise<ChatSession[]> => {
+  console.log("[Clairvyn:chat] getUserChatSessions", { userId, hasToken: !!token });
+  if (token) {
+    try {
+      const backendSessions: any[] = await apiFetch(`/api/chats`, {
+        method: "GET",
+        token,
+      });
+      const converted: ChatSession[] = backendSessions.map((s) => ({
+        id: String(s.id),
+        userId,
+        title: s.title ?? null,
+        messages: [],
+        createdAt: new Date(s.created_at || s.createdAt || Date.now()),
+        updatedAt: new Date(s.updated_at || s.updatedAt || Date.now()),
+      }));
+
+      try {
+        const all = getSessionsFromStorage().filter((s) => s.userId !== userId);
+        const merged = all.concat(converted);
+        saveSessionsToStorage(merged);
+      } catch {
+        /* ignore cache failure */
+      }
+
+      const sorted = converted.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      console.log("[Clairvyn:chat] getUserChatSessions → backend", { count: sorted.length, titles: sorted.map((s) => s.title) });
+      return sorted;
+    } catch (err) {
+      console.warn("[Clairvyn:chat] getUserChatSessions backend failed, using local", { userId, err });
+    }
+  }
+
   try {
     const sessions = getSessionsFromStorage();
-    // In local storage mode, we might just return all sessions if we assume single user per browser,
-    // but filtering by userId keeps the logic consistent with the interface.
-    // If userId is not provided or we want to show all local chats, we could adjust.
-    // For now, strict filtering:
-    return sessions
-      .filter(s => s.userId === userId)
+    const filtered = sessions
+      .filter((s) => s.userId === userId)
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    console.log("[Clairvyn:chat] getUserChatSessions → local", { count: filtered.length });
+    return filtered;
   } catch (error) {
-    console.error('Error getting user chat sessions:', error);
+    console.error("[Clairvyn:chat] getUserChatSessions error", { userId, error });
     return [];
   }
 };
+
 
 // Simulate AI response
 export const simulateAIResponse = async (userMessage: string): Promise<string> => {
@@ -145,6 +300,60 @@ export const simulateAIResponse = async (userMessage: string): Promise<string> =
     return "Excellent choice! Let's focus on that room. What are your priorities - functionality, aesthetics, or both? I can suggest optimal dimensions and layouts.";
   } else {
     return "I'm excited to help you with your architectural design! Whether it's floor plans, CAD drawings, or space planning, I'm here to guide you. What would you like to work on today?";
+  }
+};
+
+// Delete a chat session (backend + local). Requires token for backend delete.
+export const deleteChatSession = async (
+  chatId: string,
+  token: string | null
+): Promise<boolean> => {
+  if (token) {
+    try {
+      await apiFetch(`/api/chats/${encodeURIComponent(chatId)}`, {
+        method: "DELETE",
+        token,
+      });
+    } catch (err) {
+      console.warn("[Clairvyn:chat] deleteChatSession backend failed", { chatId, err });
+      return false;
+    }
+  }
+  try {
+    const sessions = getSessionsFromStorage().filter((s) => s.id !== chatId);
+    saveSessionsToStorage(sessions);
+    return true;
+  } catch (error) {
+    console.error("[Clairvyn:chat] deleteChatSession local update error", { chatId, error });
+    return false;
+  }
+};
+
+// Replace messages for a chat session (used after syncing with backend)
+export const setChatMessages = async (
+  chatId: string,
+  messages: Message[]
+): Promise<void> => {
+  try {
+    const sessions = getSessionsFromStorage();
+    const sessionIndex = sessions.findIndex((s) => s.id === chatId);
+    if (sessionIndex === -1) {
+      sessions.push({
+        id: chatId,
+        userId: '',
+        messages,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      console.log("[Clairvyn:chat] setChatMessages (new session)", { chatId, count: messages.length });
+    } else {
+      sessions[sessionIndex].messages = messages;
+      sessions[sessionIndex].updatedAt = new Date();
+      console.log("[Clairvyn:chat] setChatMessages", { chatId, count: messages.length });
+    }
+    saveSessionsToStorage(sessions);
+  } catch (error) {
+    console.error("[Clairvyn:chat] setChatMessages error", { chatId, error });
   }
 };
 
