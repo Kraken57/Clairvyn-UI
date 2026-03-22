@@ -1230,7 +1230,7 @@ export default function ChatbotPage() {
                   className="flex justify-start"
                 >
                   <div className="chat-bubble-assistant text-gray-800 dark:text-gray-200 p-3 sm:p-4 rounded-2xl shadow-lg">
-                    <p className="text-sm sm:text-base leading-relaxed">Designing...</p>
+                    <p className="text-sm sm:text-base leading-relaxed chat-loading-text">Designing...</p>
                     <TypingIndicator />
                   </div>
                 </motion.div>
@@ -1244,12 +1244,18 @@ export default function ChatbotPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="flex justify-start"
               >
-                <div className="chat-bubble-assistant text-gray-800 p-3 sm:p-4 rounded-2xl shadow-lg">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-teal-600" />
-                    <span className="text-xs sm:text-sm">
+                <div className="chat-bubble-assistant text-gray-800 dark:text-gray-200 p-3 sm:p-4 rounded-2xl shadow-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 shrink-0 animate-spin text-teal-600 dark:text-teal-400" />
+                    <motion.span
+                      key={isTurnInFlight ? assistantStatusLine : "clairvyn-thinking"}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                      className="text-xs sm:text-sm chat-loading-text min-w-0"
+                    >
                       {isTurnInFlight ? assistantStatusLine : "Clairvyn is thinking..."}
-                    </span>
+                    </motion.span>
                   </div>
                 </div>
               </motion.div>

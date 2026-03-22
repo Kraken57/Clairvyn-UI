@@ -507,6 +507,50 @@ html { scroll-behavior: smooth; }
   transform: translateY(-1px);
   box-shadow: 0 16px 36px rgba(79, 70, 229, 0.2);
 }
+
+  @keyframes chat-loading-text-shimmer {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 200% 50%;
+    }
+  }
+
+  /* Animated gradient fill for assistant loading / typing labels */
+  .chat-loading-text {
+    display: inline-block;
+    max-width: 100%;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    background-image: linear-gradient(
+      105deg,
+      #0f766e 0%,
+      #0d9488 16%,
+      #4f46e5 38%,
+      #0891b2 58%,
+      #6366f1 78%,
+      #0f766e 100%
+    );
+    background-size: 220% auto;
+    background-position: 0% 50%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: chat-loading-text-shimmer 4.8s ease-in-out infinite;
+  }
+
+  .dark .chat-loading-text {
+    background-image: linear-gradient(
+      105deg,
+      #5eead4 0%,
+      #99f6e4 18%,
+      #a5b4fc 40%,
+      #22d3ee 58%,
+      #c4b5fd 78%,
+      #5eead4 100%
+    );
+  }
 }
 
 /* Default in-app scrollbars — light purple (match theme); use .scrollbar-sidebar for grey */
