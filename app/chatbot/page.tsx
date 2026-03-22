@@ -40,14 +40,58 @@ import {
   Message as ChatMessage,
   ChatSession,
   getUserChatSessions,
-  getChatMessages,
   deleteChatSession,
+  getLastActiveChatId,
+  setLastActiveChatId,
+  loadMessagesForChat,
 } from "@/lib/chat-service"
 import { apiFetch, getBackendUrl } from "@/lib/backendApi"
 import { canGuestGenerate, incrementGuestGenerationsUsed, getGuestGenerationsUsed, FREE_GUEST_GENERATIONS } from "@/lib/guest-limits"
 import { PaymentPaywallModal } from "@/components/PaymentPaywallModal"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useClairvynOnboarding } from "@/hooks/useClairvynOnboarding"
+
+/** Shown while waiting for an assistant turn; phases follow elapsed time; line changes every 20–30s. */
+const ASSISTANT_STATUS_PHASES: readonly (readonly string[])[] = [
+  [
+    "Interpreting your requirements",
+    "Mapping spatial constraints",
+    "Translating inputs into layout logic",
+    "Defining room relationships",
+  ],
+  [
+    "Generating initial floorplan structure",
+    "Optimizing room placements for flow",
+    "Aligning walls and dimensions",
+    "Ensuring structural feasibility",
+    "Calculating circulation efficiency",
+    "Adjusting proportions for usability",
+    "Eliminating wasted space",
+  ],
+  [
+    "Positioning doors and entry points",
+    "Placing windows for light and ventilation",
+    "Arranging furniture for functionality",
+    "Balancing private and common areas",
+    "Refining layout for real-world use",
+  ],
+  [
+    "Running final layout checks",
+    "Fine-tuning spatial alignment",
+    "Preparing clean 2D output",
+    "Almost ready",
+  ],
+]
+
+/** Phase boundaries (ms from start): start 0–2m, then mid, detail, final until done. */
+const ASSISTANT_PHASE_END_MS = [120_000, 300_000, 420_000] as const
+
+function assistantPhaseIndex(elapsedMs: number): number {
+  if (elapsedMs < ASSISTANT_PHASE_END_MS[0]) return 0
+  if (elapsedMs < ASSISTANT_PHASE_END_MS[1]) return 1
+  if (elapsedMs < ASSISTANT_PHASE_END_MS[2]) return 2
+  return 3
+}
 
 /** Fetches image with Bearer token and displays via blob URL (for auth-protected backend images). */
 function AuthImage({
@@ -195,6 +239,11 @@ export default function ChatbotPage() {
   const addMessage = (msg: any) => setMessages(prev => [...prev, msg])
   const [isPencilHovered, setIsPencilHovered] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  /** True only while waiting for POST /turn (not e.g. new chat creation). */
+  const [isTurnInFlight, setIsTurnInFlight] = useState(false)
+  const [assistantStatusLine, setAssistantStatusLine] = useState(
+    ASSISTANT_STATUS_PHASES[0][0]
+  )
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [backendChatId, setBackendChatId] = useState<string | null>(null)
   const [showGuestBanner, setShowGuestBanner] = useState(true)
@@ -204,6 +253,51 @@ export default function ChatbotPage() {
   // Chat history state (integrated into sidebar)
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isTurnInFlight) return
+
+    const start = Date.now()
+    const lastPhaseRef = { current: 0 }
+    const msgIndexRef = { current: 0 }
+
+    const applyNextLine = () => {
+      const elapsed = Date.now() - start
+      const phase = assistantPhaseIndex(elapsed)
+      const messages = ASSISTANT_STATUS_PHASES[phase]
+
+      if (phase !== lastPhaseRef.current) {
+        lastPhaseRef.current = phase
+        msgIndexRef.current = 0
+      } else {
+        msgIndexRef.current = (msgIndexRef.current + 1) % messages.length
+      }
+
+      setAssistantStatusLine(messages[msgIndexRef.current])
+    }
+
+    lastPhaseRef.current = 0
+    msgIndexRef.current = 0
+    setAssistantStatusLine(ASSISTANT_STATUS_PHASES[0][0])
+
+    let timeoutId: ReturnType<typeof setTimeout>
+    let cancelled = false
+
+    const schedule = () => {
+      const delayMs = 20_000 + Math.random() * 10_000
+      timeoutId = setTimeout(() => {
+        if (cancelled) return
+        applyNextLine()
+        schedule()
+      }, delayMs)
+    }
+    schedule()
+
+    return () => {
+      cancelled = true
+      clearTimeout(timeoutId)
+    }
+  }, [isTurnInFlight])
 
   // Load messages on mount - only create new local chat if user has no sessions (prevents duplicate from Strict Mode)
   useEffect(() => {
@@ -231,14 +325,45 @@ export default function ChatbotPage() {
           console.log("[Clairvyn] initChat: no sessions, creating new chat");
           await createNewChat()
         } else {
-          const latest = sessions[0]
-          console.log("[Clairvyn] initChat: restoring latest", { chatId: latest.id, title: latest.title, messageCount: latest.messages.length });
-          setCurrentChatId(latest.id)
-          setMessages(latest.messages.map((m) => ({
-            ...m,
-            timestamp: typeof m.timestamp === "string" ? m.timestamp : (m.timestamp as Date).toISOString()
-          })))
-          setHasStarted(latest.messages.length > 0)
+          const preferredId = getLastActiveChatId(user.uid)
+          const fallbackId = sessions[0].id
+          const targetId =
+            preferredId && sessions.some((s) => s.id === preferredId) ? preferredId : fallbackId
+          console.log("[Clairvyn] initChat: restoring session", {
+            targetId,
+            preferredId,
+            fallbackId,
+          })
+
+          const { messages: sessionMessages, fromBackend: loadedFromBackend } =
+            await loadMessagesForChat(targetId, token)
+
+          if (loadedFromBackend) {
+            await setChatMessages(
+              targetId,
+              sessionMessages.map((m) => ({
+                ...m,
+                timestamp:
+                  typeof m.timestamp === "string"
+                    ? m.timestamp
+                    : (m.timestamp as Date).toISOString(),
+              }))
+            )
+            setBackendChatId(targetId)
+          }
+
+          setCurrentChatId(targetId)
+          setMessages(
+            sessionMessages.map((m) => ({
+              ...m,
+              timestamp:
+                typeof m.timestamp === "string"
+                  ? m.timestamp
+                  : (m.timestamp as Date).toISOString(),
+            }))
+          )
+          setHasStarted(sessionMessages.length > 0)
+          setLastActiveChatId(user.uid, targetId)
         }
       }
       initChat()
@@ -313,6 +438,7 @@ export default function ChatbotPage() {
 
         const chatId = await createChatSession(user.uid, localId || undefined)
         setCurrentChatId(chatId)
+        setLastActiveChatId(user.uid, chatId)
         if (!localId) setBackendChatId(null)
 
         setMessages([])
@@ -351,6 +477,7 @@ export default function ChatbotPage() {
       if (currentChatId && currentChatId !== backendId) {
         await renameChatSession(currentChatId, backendId)
         setCurrentChatId(backendId)
+        if (user) setLastActiveChatId(user.uid, backendId)
       }
       setBackendChatId(backendId)
       console.log("[Clairvyn] ensureBackendChat: done", { backendId, title: data.title });
@@ -415,6 +542,7 @@ export default function ChatbotPage() {
       return
     }
 
+    setIsTurnInFlight(true)
     setIsLoading(true)
     console.log("[Clairvyn] handleSubmit: start", { userText: userText.slice(0, 50), currentChatId, hasUser: !!user });
 
@@ -525,6 +653,7 @@ export default function ChatbotPage() {
       }
       setMessages(prev => [...prev, { ...errorMessage, timestamp: new Date().toISOString() }])
     } finally {
+      setIsTurnInFlight(false)
       setIsLoading(false)
     }
   }
@@ -669,6 +798,7 @@ export default function ChatbotPage() {
       if (user) {
         const newId = await createChatSession(user.uid)
         setCurrentChatId(newId)
+        setLastActiveChatId(user.uid, newId)
       }
     }
   }
@@ -677,19 +807,8 @@ export default function ChatbotPage() {
     console.log("[Clairvyn] loadChatSession", { chatId });
     try {
       const token = await getIdToken()
-      let sessionMessages = [] as ChatMessage[]
-      let loadedFromBackend = false
-      if (token) {
-        try {
-          sessionMessages = await getChatMessages(chatId, token)
-          loadedFromBackend = true
-        } catch (err) {
-          console.warn("[Clairvyn] loadChatSession: backend failed, using local", err)
-          sessionMessages = await getChatMessages(chatId)
-        }
-      } else {
-        sessionMessages = await getChatMessages(chatId)
-      }
+      const { messages: sessionMessages, fromBackend: loadedFromBackend } =
+        await loadMessagesForChat(chatId, token)
       console.log("[Clairvyn] loadChatSession: messages loaded", { chatId, count: sessionMessages.length, fromBackend: loadedFromBackend });
 
       if (loadedFromBackend) {
@@ -701,6 +820,7 @@ export default function ChatbotPage() {
       }
 
       setCurrentChatId(chatId)
+      if (user) setLastActiveChatId(user.uid, chatId)
       setMessages(sessionMessages.map((m) => ({
         ...m,
         timestamp: typeof m.timestamp === "string" ? m.timestamp : (m.timestamp as Date).toISOString()
@@ -1127,7 +1247,9 @@ export default function ChatbotPage() {
                 <div className="chat-bubble-assistant text-gray-800 p-3 sm:p-4 rounded-2xl shadow-lg">
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-teal-600" />
-                    <span className="text-xs sm:text-sm">Clairvyn is thinking...</span>
+                    <span className="text-xs sm:text-sm">
+                      {isTurnInFlight ? assistantStatusLine : "Clairvyn is thinking..."}
+                    </span>
                   </div>
                 </div>
               </motion.div>

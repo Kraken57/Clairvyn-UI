@@ -29,6 +29,39 @@ export interface ChatSession {
 
 const STORAGE_KEY = 'clairvyn_chat_sessions';
 
+/** Per-user last opened chat id (survives full page refresh). */
+const LAST_ACTIVE_CHAT_BY_USER_KEY = 'clairvyn_last_active_chat_by_user';
+
+function readLastActiveChatMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(LAST_ACTIVE_CHAT_BY_USER_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, string>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getLastActiveChatId(userId: string): string | null {
+  const id = readLastActiveChatMap()[userId];
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+export function setLastActiveChatId(userId: string, chatId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const map = readLastActiveChatMap();
+    map[userId] = chatId;
+    localStorage.setItem(LAST_ACTIVE_CHAT_BY_USER_KEY, JSON.stringify(map));
+  } catch (error) {
+    console.error('[Clairvyn:chat] setLastActiveChatId error', error);
+  }
+}
+
 // Helper to get sessions from local storage
 const getSessionsFromStorage = (): ChatSession[] => {
   if (typeof window === 'undefined') return [];
@@ -180,6 +213,23 @@ export const getChatMessages = async (chatId: string, token?: string): Promise<M
     return [];
   }
 };
+
+/** Load messages for a chat (backend when token works, else local). */
+export async function loadMessagesForChat(
+  chatId: string,
+  token: string | null | undefined
+): Promise<{ messages: Message[]; fromBackend: boolean }> {
+  if (token) {
+    try {
+      const sessionMessages = await getChatMessages(chatId, token);
+      return { messages: sessionMessages, fromBackend: true };
+    } catch (err) {
+      console.warn("[Clairvyn:chat] loadMessagesForChat backend failed, using local", { chatId, err });
+    }
+  }
+  const sessionMessages = await getChatMessages(chatId);
+  return { messages: sessionMessages, fromBackend: false };
+}
 
 // Get all chat sessions for a user
 export const getUserChatSessions = async (
