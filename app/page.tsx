@@ -293,7 +293,7 @@ export default function HomePage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.35 }}
                 transition={{ duration: 0.45, ease: "easeOut", delay: index * 0.06 }}
-                className="text-center p-10 md:p-12 rounded-[28px] bg-white/75 dark:bg-white/5 border border-purple-500/7 dark:border-white/10 hover:shadow-xl transition-shadow backdrop-blur"
+                className="text-center p-10 md:p-12 rounded-[28px] bg-gradient-to-b from-white to-[#C8BFFB] dark:bg-white/5 border border-purple-500/7 dark:border-white/10 hover:shadow-xl transition-shadow backdrop-blur"
               >
                 <div
                   className={`w-48 h-48 bg-gradient-to-br ${feature.color} rounded-[34px] flex items-center justify-center mx-auto mb-9 shadow-[0_22px_55px_rgba(30,43,214,0.14)]`}
