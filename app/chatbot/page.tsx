@@ -1265,11 +1265,6 @@ export default function ChatbotPage() {
 
         {/* Chat Input - Single Container with Smooth Animation */}
         <div className={`chat-input-container ${hasStarted ? "dock" : "start"}`}>
-          {!hasPaid && user && (
-            <p className="text-center text-xs text-gray-500 dark:text-gray-400 mb-1">
-              {getGuestGenerationsUsed()} of {FREE_GUEST_GENERATIONS} free generations used
-            </p>
-          )}
           <div className="chat-input">
             <div className="flex-1 min-w-0" data-onboarding="chat-input">
               <input

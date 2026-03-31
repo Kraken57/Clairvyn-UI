@@ -15,6 +15,8 @@ export default function HomePage() {
   const router = useRouter()
   const [aboutOpen, setAboutOpen] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
+  const [consentOpen, setConsentOpen] = useState(false)
   const [heroStack, setHeroStack] = useState([0, 1, 2] as number[])
   const [leavingId, setLeavingId] = useState<number | null>(null)
 
@@ -347,6 +349,18 @@ export default function HomePage() {
                   className="text-gray-600 hover:text-teal-600 transition-colors font-medium focus:outline-none"
                 >
                   Terms of Service
+                </button>
+                <button
+                  onClick={() => setPrivacyOpen(true)}
+                  className="text-gray-600 hover:text-teal-600 transition-colors font-medium focus:outline-none"
+                >
+                  Privacy Policy
+                </button>
+                <button
+                  onClick={() => setConsentOpen(true)}
+                  className="text-gray-600 hover:text-teal-600 transition-colors font-medium focus:outline-none"
+                >
+                  Consent Notice
                 </button>
               </div>
             </div>

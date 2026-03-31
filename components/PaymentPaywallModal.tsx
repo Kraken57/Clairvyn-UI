@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Loader2, Sparkles, Zap, Crown, X, Check } from "lucide-react"
 import { getBackendUrl } from "@/lib/backendApi"
 
-const PAYWALL_PRICE_INR = 9999999
+const PAYWALL_PRICE_INR = 299
 const FREE_GENERATIONS = 6
 
 const features = [
