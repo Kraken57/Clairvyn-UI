@@ -169,22 +169,6 @@ export default function SignUpPage() {
               </div>
 
               <div>
-                <Label htmlFor="university" className="sr-only">
-                  University
-                </Label>
-                <Input
-                  id="university"
-                  type="text"
-                  value={university}
-                  onChange={(e) => setUniversity(e.target.value)}
-                  className="h-12 rounded-xl bg-white/80 border-gray-200 focus-visible:ring-teal-500 placeholder:text-gray-500"
-                  placeholder="University"
-                  required
-                  autoComplete="organization"
-                />
-              </div>
-
-              <div>
                 <Label htmlFor="password" className="sr-only">
                   Password
                 </Label>
