@@ -2,9 +2,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { apiFetch } from "./backendApi";
 
 export interface Message {
+  id?: string | number;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string | Date;
+  feedback_submitted?: boolean;
   /** Backend: image_url on message or inside extra_data */
   image_url?: string | null;
   /** Backend: document_id, png_url, dxf_url, spec, layout, etc. */
@@ -186,6 +188,7 @@ export const getChatMessages = async (chatId: string, token?: string): Promise<M
       );
       const array: any[] = Array.isArray(data) ? data : [];
       const hist: Message[] = array.map((m) => ({
+        id: m.id,
         role: m.sender_type === "user" ? "user" : "assistant",
         content: m.content ?? "",
         timestamp:
@@ -194,6 +197,7 @@ export const getChatMessages = async (chatId: string, token?: string): Promise<M
             : (m.created_at as Date)?.toISOString?.() ?? new Date().toISOString(),
         image_url: m.image_url ?? undefined,
         extra_data: m.extra_data ?? undefined,
+        feedback_submitted: Boolean(m.feedback_submitted),
       }));
       console.log("[Clairvyn:chat] getChatMessages → backend", { chatId, count: hist.length });
       return hist;

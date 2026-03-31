@@ -26,6 +26,8 @@ import {
   Download,
   FileDown,
   CircleHelp,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import Link from "next/link"
@@ -85,6 +87,51 @@ const ASSISTANT_STATUS_PHASES: readonly (readonly string[])[] = [
 
 /** Phase boundaries (ms from start): start 0–2m, then mid, detail, final until done. */
 const ASSISTANT_PHASE_END_MS = [120_000, 300_000, 420_000] as const
+
+type FeedbackType = "positive" | "negative"
+type FeedbackCategory =
+  | "layout_accuracy"
+  | "speed"
+  | "ease_of_use"
+  | "output_quality"
+  | "layout_incorrect"
+  | "missing_rooms_elements"
+  | "unrealistic_dimensions"
+  | "not_following_prompt"
+  | "too_slow"
+  | "hard_to_edit"
+type FeedbackSeverity = "slight_issue" | "usable_with_edits" | "completely_unusable"
+
+const POSITIVE_FEEDBACK_OPTIONS: ReadonlyArray<{ id: FeedbackCategory; label: string }> = [
+  { id: "layout_accuracy", label: "Layout accuracy" },
+  { id: "speed", label: "Speed" },
+  { id: "ease_of_use", label: "Ease of use" },
+  { id: "output_quality", label: "Output quality" },
+]
+
+const NEGATIVE_FEEDBACK_OPTIONS: ReadonlyArray<{ id: FeedbackCategory; label: string }> = [
+  { id: "layout_incorrect", label: "Layout incorrect" },
+  { id: "missing_rooms_elements", label: "Missing rooms/elements" },
+  { id: "unrealistic_dimensions", label: "Unrealistic dimensions" },
+  { id: "not_following_prompt", label: "Not following prompt" },
+  { id: "too_slow", label: "Too slow" },
+  { id: "hard_to_edit", label: "Hard to edit" },
+]
+
+const NEGATIVE_SEVERITY_OPTIONS: ReadonlyArray<{ id: FeedbackSeverity; label: string }> = [
+  { id: "slight_issue", label: "Slight issue" },
+  { id: "usable_with_edits", label: "Usable with edits" },
+  { id: "completely_unusable", label: "Completely unusable" },
+]
+
+type MessageFeedbackState = {
+  feedbackType?: FeedbackType
+  category?: FeedbackCategory
+  severity?: FeedbackSeverity
+  submitted?: boolean
+  alreadySubmitted?: boolean
+  error?: string | null
+}
 
 function assistantPhaseIndex(elapsedMs: number): number {
   if (elapsedMs < ASSISTANT_PHASE_END_MS[0]) return 0
@@ -249,10 +296,23 @@ export default function ChatbotPage() {
   const [showGuestBanner, setShowGuestBanner] = useState(true)
   const [hasStarted, setHasStarted] = useState(false)
   const [showPaywall, setShowPaywall] = useState(false)
+  const [feedbackByMessage, setFeedbackByMessage] = useState<Record<string, MessageFeedbackState>>({})
+  const [feedbackSubmittingByMessage, setFeedbackSubmittingByMessage] = useState<Record<string, boolean>>({})
 
   // Chat history state (integrated into sidebar)
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+
+  const getFeedbackKey = (message: ChatMessage, index: number): string => {
+    const id = (message as any)?.id
+    return id != null ? String(id) : `idx-${index}`
+  }
+
+  const isGeneratedAssistantMessage = (message: ChatMessage): boolean => {
+    if (message.role !== "assistant") return false
+    const extra = (message as any).extra_data
+    return Boolean(extra?.document_id || extra?.png_url)
+  }
 
   useEffect(() => {
     if (!isTurnInFlight) return
@@ -606,6 +666,7 @@ export default function ChatbotPage() {
         ? raw.messages
         : [];
       const updatedHistory: ChatMessage[] = array.map((m: any) => ({
+        id: m.id,
         role: m.sender_type === "user" ? "user" : "assistant",
         content: m.content ?? "",
         timestamp:
@@ -614,6 +675,7 @@ export default function ChatbotPage() {
             : (m.created_at as Date)?.toISOString?.() ?? new Date().toISOString(),
         image_url: m.image_url ?? undefined,
         extra_data: m.extra_data ?? undefined,
+        feedback_submitted: Boolean(m.feedback_submitted),
       }));
 
       if (currentChatId) {
@@ -655,6 +717,75 @@ export default function ChatbotPage() {
     } finally {
       setIsTurnInFlight(false)
       setIsLoading(false)
+    }
+  }
+
+  const updateFeedbackState = (key: string, next: Partial<MessageFeedbackState>) => {
+    setFeedbackByMessage((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] ?? {}),
+        ...next,
+      },
+    }))
+  }
+
+  const submitFeedback = async (message: ChatMessage, index: number) => {
+    const key = getFeedbackKey(message, index)
+    const state = feedbackByMessage[key] ?? {}
+    const chatId = backendChatId ?? currentChatId
+    const messageIdRaw = (message as any)?.id
+    const messageId = Number(messageIdRaw)
+    const alreadySubmittedFromBackend = Boolean((message as any)?.feedback_submitted)
+
+    if (alreadySubmittedFromBackend) {
+      updateFeedbackState(key, { submitted: true, alreadySubmitted: true, error: null })
+      return
+    }
+
+    if (!chatId || !Number.isFinite(messageId) || messageId <= 0) {
+      updateFeedbackState(key, { error: "Unable to submit feedback for this response." })
+      return
+    }
+    if (!state.feedbackType || !state.category || (state.feedbackType === "negative" && !state.severity)) {
+      updateFeedbackState(key, { error: "Please complete all feedback steps." })
+      return
+    }
+
+    setFeedbackSubmittingByMessage((prev) => ({ ...prev, [key]: true }))
+    updateFeedbackState(key, { error: null })
+
+    try {
+      const token = await getIdToken()
+      if (!token) throw new Error("Missing auth token")
+
+      await apiFetch(
+        `/api/chats/${encodeURIComponent(chatId)}/feedback`,
+        {
+          method: "POST",
+          body: {
+            message_id: messageId,
+            feedback_type: state.feedbackType,
+            category: state.category,
+            severity: state.feedbackType === "negative" ? state.severity : null,
+            comment: null,
+            metadata: { source: "chatbot_inline_feedback_v1" },
+          },
+          token,
+        }
+      )
+
+      updateFeedbackState(key, { submitted: true, error: null })
+    } catch (error: any) {
+      console.error("[Clairvyn] submitFeedback failed", error)
+      const message = typeof error?.message === "string" ? error.message : ""
+      if (message.includes("API 409")) {
+        updateFeedbackState(key, { submitted: true, alreadySubmitted: true, error: null })
+      } else {
+        updateFeedbackState(key, { error: "Failed to submit feedback. Please try again." })
+      }
+    } finally {
+      setFeedbackSubmittingByMessage((prev) => ({ ...prev, [key]: false }))
     }
   }
 
@@ -1207,6 +1338,109 @@ export default function ChatbotPage() {
                       )}
                     </div>
                   ) : null}
+                  {(() => {
+                    if (!isGeneratedAssistantMessage(message)) return null
+                    const feedbackKey = getFeedbackKey(message, index)
+                    const feedbackState = feedbackByMessage[feedbackKey] ?? {}
+                    const isSubmitting = !!feedbackSubmittingByMessage[feedbackKey]
+                    const optionClass =
+                      "text-xs sm:text-sm px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500"
+                    const selectedClass = "bg-indigo-600 text-white border-indigo-600"
+
+                    const alreadySubmittedFromBackend = Boolean((message as any)?.feedback_submitted)
+                    if (feedbackState.submitted || alreadySubmittedFromBackend) {
+                      return (
+                        <div className="mt-3 rounded-xl border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-900 px-3 py-2 text-xs sm:text-sm text-green-700 dark:text-green-300">
+                          {feedbackState.alreadySubmitted || alreadySubmittedFromBackend ? "Feedback already submitted." : "Thanks for your feedback."}
+                        </div>
+                      )
+                    }
+
+                    const options =
+                      feedbackState.feedbackType === "negative"
+                        ? NEGATIVE_FEEDBACK_OPTIONS
+                        : POSITIVE_FEEDBACK_OPTIONS
+
+                    return (
+                      <div className="mt-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-gray-900/40 p-3 space-y-3">
+                        <div className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200">Are you liking Clairvyn so far?</div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className={`${optionClass} ${feedbackState.feedbackType === "positive" ? selectedClass : ""}`}
+                            onClick={() => updateFeedbackState(feedbackKey, { feedbackType: "positive", category: undefined, severity: undefined, error: null })}
+                          >
+                            <span className="inline-flex items-center gap-1"><ThumbsUp className="w-3.5 h-3.5" />Yes</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`${optionClass} ${feedbackState.feedbackType === "negative" ? selectedClass : ""}`}
+                            onClick={() => updateFeedbackState(feedbackKey, { feedbackType: "negative", category: undefined, severity: undefined, error: null })}
+                          >
+                            <span className="inline-flex items-center gap-1"><ThumbsDown className="w-3.5 h-3.5" />No</span>
+                          </button>
+                        </div>
+
+                        {feedbackState.feedbackType && (
+                          <>
+                            <div className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200">
+                              {feedbackState.feedbackType === "positive" ? "What did you like the most?" : "What was wrong according to you?"}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {options.map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`${optionClass} ${feedbackState.category === option.id ? selectedClass : ""}`}
+                                  onClick={() => updateFeedbackState(feedbackKey, { category: option.id, error: null })}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+
+                        {feedbackState.feedbackType === "negative" && feedbackState.category && (
+                          <>
+                            <div className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200">How bad was it?</div>
+                            <div className="flex flex-wrap gap-2">
+                              {NEGATIVE_SEVERITY_OPTIONS.map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`${optionClass} ${feedbackState.severity === option.id ? selectedClass : ""}`}
+                                  onClick={() => updateFeedbackState(feedbackKey, { severity: option.id, error: null })}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+
+                        {feedbackState.error && (
+                          <div className="text-xs text-red-600 dark:text-red-400">{feedbackState.error}</div>
+                        )}
+
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => submitFeedback(message, index)}
+                            disabled={
+                              isSubmitting ||
+                              !feedbackState.feedbackType ||
+                              !feedbackState.category ||
+                              (feedbackState.feedbackType === "negative" && !feedbackState.severity)
+                            }
+                            className="text-xs sm:text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isSubmitting ? "Submitting..." : "Submit feedback"}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })()}
                   <p className={`text-xs mt-2 sm:mt-3 ${message.role === 'user' ? 'text-gray-500 dark:text-indigo-100/70' : 'text-gray-500 dark:text-gray-400'
                     }`}>
                     {message.timestamp
