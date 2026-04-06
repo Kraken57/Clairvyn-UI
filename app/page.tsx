@@ -19,6 +19,9 @@ export default function HomePage() {
   const [leavingId, setLeavingId] = useState<number | null>(null)
   const [heroStackStep, setHeroStackStep] = useState(22)
   const [loadingTimeout, setLoadingTimeout] = useState(false)
+  const [redirectDecided, setRedirectDecided] = useState(false)
+  // Safety: if router.replace stalls or the effect throws, show landing page after 4s
+  const [redirectTimedOut, setRedirectTimedOut] = useState(false)
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)")
@@ -63,66 +66,85 @@ export default function HomePage() {
     return () => window.clearInterval(id)
   }, [heroStack, leavingId])
 
+  // Safety fallback: show landing page if redirect decision is still pending after 4s
+  // (covers stalled router.replace, JS errors in effect, slow Firebase on bad networks)
+  useEffect(() => {
+    if (!user || loading || redirectDecided) return
+    const timer = setTimeout(() => {
+      console.warn("[Clairvyn] Redirect decision timeout - showing landing page as fallback")
+      setRedirectTimedOut(true)
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [user, loading, redirectDecided])
+
   // If already logged in and this is their first visit to landing page in this session, redirect to chat
   useEffect(() => {
     if (loading) return
     if (!user) return
-    
+
+    // Wrap entire logic in try-catch: any unhandled error must still resolve redirectDecided
+    // so we never leave the user on a permanent spinner.
     try {
       // Check if sessionStorage is available (may be disabled in private/incognito mode)
       const testKey = "__test__"
       sessionStorage.setItem(testKey, "test")
       sessionStorage.removeItem(testKey)
     } catch (e) {
-      // sessionStorage not available (private mode, etc.) - can't redirect safely
-      // Allow user to stay on landing page
       console.warn("[Clairvyn] sessionStorage not available, skipping redirect logic")
+      setRedirectDecided(true)
       return
     }
-    
-    // Check if user explicitly navigated here from chatbot (via Home button)
-    const fromChatbot = sessionStorage.getItem("fromChatbot")
-    
-    if (fromChatbot === "true") {
-      // User came from chatbot via Home button - allow landing page access
-      sessionStorage.removeItem("fromChatbot")
+
+    try {
+      // Check if user explicitly navigated here from chatbot (via Home button)
+      const fromChatbot = sessionStorage.getItem("fromChatbot")
+
+      if (fromChatbot === "true") {
+        sessionStorage.removeItem("fromChatbot")
+        sessionStorage.setItem("hasVisitedApp", "true")
+        setRedirectDecided(true)
+        return
+      }
+
+      // Check if user has already visited the app (navigated through pages)
+      const hasVisitedApp = sessionStorage.getItem("hasVisitedApp")
+      if (hasVisitedApp === "true") {
+        setRedirectDecided(true)
+        return
+      }
+
+      // Check if user came from another app page (referrer indicates internal navigation)
+      const referrer = document.referrer
+      const isInternalNavigation = referrer && (
+        referrer.includes("/chatbot") ||
+        referrer.includes("/signin") ||
+        referrer.includes("/signup") ||
+        referrer.includes("/onboarding") ||
+        referrer.includes("/feedback") ||
+        referrer.includes("/about") ||
+        referrer.includes("/pricing") ||
+        referrer.includes("/blog") ||
+        referrer.includes("/privacy-policy") ||
+        referrer.includes("/terms-of-service") ||
+        referrer.includes("/consent-notice") ||
+        referrer.includes("/loading-preview")
+      )
+
+      if (isInternalNavigation) {
+        sessionStorage.setItem("hasVisitedApp", "true")
+        setRedirectDecided(true)
+        return
+      }
+
+      // First time authenticated visit with no internal navigation - redirect to chatbot
       sessionStorage.setItem("hasVisitedApp", "true")
-      return
+      router.replace("/chatbot")
+      // Note: redirectDecided intentionally NOT set here — we expect navigation to unmount
+      // the component. The redirectTimedOut fallback above handles a stalled navigation.
+    } catch (e) {
+      console.error("[Clairvyn] Redirect logic error — showing landing page", e)
+      setRedirectDecided(true)
     }
-    
-    // Check if user has already visited the app (navigated through pages)
-    const hasVisitedApp = sessionStorage.getItem("hasVisitedApp")
-    if (hasVisitedApp === "true") {
-      // User has already visited app pages - allow landing page access
-      return
-    }
-    
-    // Check if user came from another app page (referrer indicates internal navigation)
-    const referrer = document.referrer
-    const isInternalNavigation = referrer && (
-      referrer.includes("/chatbot") || 
-      referrer.includes("/signin") || 
-      referrer.includes("/signup") ||
-      referrer.includes("/onboarding") ||
-      referrer.includes("/feedback") ||
-      referrer.includes("/about") ||
-      referrer.includes("/pricing") ||
-      referrer.includes("/blog") ||
-      referrer.includes("/privacy-policy") ||
-      referrer.includes("/terms-of-service") ||
-      referrer.includes("/consent-notice") ||
-      referrer.includes("/loading-preview")
-    )
-    
-    if (isInternalNavigation) {
-      // User navigated from another internal page - allow landing page access
-      sessionStorage.setItem("hasVisitedApp", "true")
-      return
-    }
-    
-    // First time authenticated visit with no internal navigation - redirect to chatbot
-    sessionStorage.setItem("hasVisitedApp", "true")
-    router.replace("/chatbot")
   }, [user, loading, router])
 
   const handleTryIt = () => {
@@ -138,7 +160,9 @@ export default function HomePage() {
 
   // Don't show landing page while checking auth — logged-in users go straight to chat
   // If loading state hangs for 5+ seconds, show landing page anyway (with timeout flag)
-  if ((loading && !loadingTimeout) || user) {
+  // If redirect was decided (user staying on landing), fall through to show landing content
+  // If redirect timed out (router.replace stalled), show landing page as fallback
+  if ((loading && !loadingTimeout) || (user && !redirectDecided && !redirectTimedOut)) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <LandingPageLoader />

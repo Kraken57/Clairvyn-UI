@@ -39,12 +39,13 @@ import {
   ChatSession,
   getUserChatSessions,
   deleteChatSession,
+  clearUserSessions,
   getLastActiveChatId,
   setLastActiveChatId,
   loadMessagesForChat,
 } from "@/lib/chat-service"
 import { apiFetch, getBackendUrl } from "@/lib/backendApi"
-import { canGuestGenerate, incrementGuestGenerationsUsed, FREE_GUEST_GENERATIONS } from "@/lib/guest-limits"
+import { canGuestGenerate, incrementGuestGenerationsUsed, FREE_GUEST_GENERATIONS, canUserGenerate, incrementUserGenerations } from "@/lib/guest-limits"
 import { profileCountryMissing } from "@/lib/meProfile"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useClairvynOnboarding } from "@/hooks/useClairvynOnboarding"
@@ -198,6 +199,9 @@ function AuthImage({
   return <img src={objectUrl} alt={alt} className={className} />
 }
 
+/** Founders always get unlimited generations regardless of payment status. */
+const FOUNDER_EMAILS = ["ronakmm2005@gmail.com", "yaswantmodi@gmail.com"]
+
 export default function ChatbotPage() {
   const { user, logout, loading: authLoading, getIdToken, isGuest } = useAuth()
   const { isDarkMode, toggleDarkMode } = useTheme()
@@ -340,6 +344,11 @@ export default function ChatbotPage() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
+  // Guard to prevent initChat running concurrently for the same user (race condition fix)
+  const initStartedForUidRef = useRef<string | null>(null)
+  // Guard to prevent concurrent handleSubmit calls (e.g. rapid double-click before React re-renders)
+  const submittingRef = useRef(false)
+
   const getFeedbackKey = (message: ChatMessage, index: number): string => {
     const id = (message as any)?.id
     return id != null ? String(id) : `idx-${index}`
@@ -399,30 +408,39 @@ export default function ChatbotPage() {
   // Load messages on mount - only create new local chat if user has no sessions (prevents duplicate from Strict Mode)
   useEffect(() => {
     console.log("[Clairvyn] init effect", { hasUser: !!user, currentChatId, authLoading });
-    if (user && !currentChatId) {
-      const initChat = async () => {
+    if (!user || authLoading) return
+    // Prevent concurrent runs for the same user (guards against getIdToken reference churn)
+    if (initStartedForUidRef.current === user.uid) return
+    initStartedForUidRef.current = user.uid
+
+    let cancelled = false
+    const uid = user.uid
+
+    const initChat = async () => {
         const token = await getIdToken()
+        if (cancelled) return
         console.log("[Clairvyn] initChat: loading sessions", { hasToken: !!token });
         let sessions: ChatSession[] = []
 
         if (token) {
           try {
-            sessions = await getUserChatSessions(user.uid, token)
+            sessions = await getUserChatSessions(uid, token)
           } catch (err) {
             console.warn("[Clairvyn] initChat: backend failed, falling back to local", err)
-            sessions = await getUserChatSessions(user.uid)
+            sessions = await getUserChatSessions(uid)
           }
         } else {
-          sessions = await getUserChatSessions(user.uid)
+          sessions = await getUserChatSessions(uid)
         }
 
+        if (cancelled) return
         console.log("[Clairvyn] initChat: sessions loaded", { count: sessions.length });
         setChatSessions(sessions)
         if (sessions.length === 0) {
           console.log("[Clairvyn] initChat: no sessions, creating new chat");
           await createNewChat()
         } else {
-          const preferredId = getLastActiveChatId(user.uid)
+          const preferredId = getLastActiveChatId(uid)
           const fallbackId = sessions[0].id
           const targetId =
             preferredId && sessions.some((s) => s.id === preferredId) ? preferredId : fallbackId
@@ -433,11 +451,13 @@ export default function ChatbotPage() {
           })
 
           const { messages: sessionMessages, fromBackend: loadedFromBackend } =
-            await loadMessagesForChat(user.uid, targetId, token)
+            await loadMessagesForChat(uid, targetId, token)
+
+          if (cancelled) return
 
           if (loadedFromBackend) {
             await setChatMessages(
-              user.uid,
+              uid,
               targetId,
               sessionMessages.map((m) => ({
                 ...m,
@@ -461,12 +481,13 @@ export default function ChatbotPage() {
             }))
           )
           setHasStarted(sessionMessages.length > 0)
-          setLastActiveChatId(user.uid, targetId)
+          setLastActiveChatId(uid, targetId)
         }
       }
       initChat()
-    }
-  }, [user, getIdToken])
+      return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, authLoading])
 
   // After return from PhonePe: confirm payment, then refetch has_paid
   useEffect(() => {
@@ -636,11 +657,21 @@ export default function ChatbotPage() {
       return // DO NOT call backend — scripted demo handled it
     }
 
-    // Unpaid users: free generations (localStorage), then waitlist
-    if (!hasPaid && !canGuestGenerate()) {
-      setWaitlistOpen(true)
-      return
+    // Unpaid users: enforce per-user (authenticated) or global (guest) floor plan limit.
+    // Founders are exempt from all generation limits.
+    const isFounder = user?.email ? FOUNDER_EMAILS.includes(user.email.toLowerCase()) : false
+    if (!hasPaid && !isFounder) {
+      const hasGenerationsLeft = user ? canUserGenerate(user.uid) : canGuestGenerate()
+      if (!hasGenerationsLeft) {
+        setWaitlistOpen(true)
+        return
+      }
     }
+
+    // Block concurrent submissions: synchronous ref check ensures the second click is
+    // rejected before React has had a chance to re-render the disabled Send button.
+    if (submittingRef.current) return
+    submittingRef.current = true
 
     setIsTurnInFlight(true)
     setIsLoading(true)
@@ -725,10 +756,21 @@ export default function ChatbotPage() {
       setMessages(updatedHistory)
       console.log("[Clairvyn] handleSubmit: success", { historyLength: updatedHistory.length, assistantContent: (data as any)?.assistant_message?.content });
 
-      if (!hasPaid) {
-        const nextUsed = incrementGuestGenerationsUsed()
-        if (nextUsed >= FREE_GUEST_GENERATIONS) {
-          setWaitlistOpen(true)
+      // Only count a generation when the backend actually produced a floor plan
+      // (extra_data.document_id or extra_data.png_url present on the last assistant message).
+      // Pure conversational replies don't consume the quota. Founders are never counted.
+      if (!hasPaid && !isFounder) {
+        const lastAssistant = updatedHistory.filter((m) => m.role === "assistant").pop()
+        const producedFloorPlan = Boolean(
+          lastAssistant?.extra_data?.document_id || lastAssistant?.extra_data?.png_url
+        )
+        if (producedFloorPlan) {
+          const nextUsed = user
+            ? incrementUserGenerations(user.uid)
+            : incrementGuestGenerationsUsed()
+          if (nextUsed >= FREE_GUEST_GENERATIONS) {
+            setWaitlistOpen(true)
+          }
         }
       }
 
@@ -760,6 +802,7 @@ export default function ChatbotPage() {
       }
       setMessages(prev => [...prev, { ...errorMessage, timestamp: new Date().toISOString() }])
     } finally {
+      submittingRef.current = false
       setIsTurnInFlight(false)
       setIsLoading(false)
     }
@@ -907,6 +950,11 @@ export default function ChatbotPage() {
     } catch (e) {
       console.warn("[Clairvyn] Error clearing sessionStorage in handleLogout", e)
     }
+
+    // Clear locally cached chat sessions so they don't bleed into the next user's session
+    if (user) {
+      try { clearUserSessions(user.uid) } catch { /* ignore */ }
+    }
     
     // Notify backend for auditing (optional; don't block sign-out if it fails)
     try {
@@ -1040,7 +1088,7 @@ export default function ChatbotPage() {
   }
 
   return (
-    <div className="min-h-screen chat-background relative overflow-hidden overflow-x-hidden">
+    <div className="flex flex-col chat-background overflow-hidden" style={{ height: '100dvh' }}>
 
       {/* Guest Banner - Temporarily disabled for demo */}
       {false && showGuestBanner && (
@@ -1294,10 +1342,10 @@ export default function ChatbotPage() {
       </AnimatePresence>
 
       {/* Main Content (sidebar is drawer-only; never persistent) */}
-      <div className="relative z-10 flex min-h-screen">
-        <main className="flex-1 flex flex-col min-h-screen">
+      <div className="relative z-10 flex flex-1 min-h-0">
+        <main className="flex-1 flex flex-col min-h-0">
           {/* Top bar (matches screenshot: hamburger on mobile, title center, search right) */}
-          <header className="relative bg-white/50 dark:bg-[#1F1E1D] border-b border-gray-200 dark:border-[#2D2C2B] backdrop-blur-sm">
+          <header className="relative bg-white dark:bg-[#1F1E1D] border-b border-gray-200 dark:border-[#2D2C2B] sm:bg-white/50 sm:backdrop-blur-sm">
             <div className="h-16 flex items-center px-3 sm:px-6 gap-2">
               <motion.button
                 onClick={() => setIsSidebarOpen(true)}
@@ -1329,26 +1377,21 @@ export default function ChatbotPage() {
             </div>
           </header>
 
-        {/* Quote Section */}
-        <AnimatePresence>
-          {messages.length === 0 && !hasStarted && (
+        {/* Chat Messages */}
+        <div className="scrollbar-main flex-1 overflow-y-auto flex flex-col px-2 sm:px-4">
+          {messages.length === 0 && !hasStarted ? (
             <motion.div
-              className="text-center py-6 sm:py-12 px-3 sm:px-4 flex-1 flex items-center justify-center"
+              className="flex-1 flex items-center justify-center text-center py-6 px-3"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.6 }}
             >
               <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-charcoal dark:text-white">
                 Let's Build Something Together!
               </h2>
             </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Chat Messages */}
-        <div className="scrollbar-main flex-1 overflow-y-auto px-2 sm:px-4 pt-4 sm:pt-6 pb-24 sm:pb-32">
-          <div className="max-w-5xl mx-auto space-y-2 sm:space-y-4">
+          ) : (
+          <div className="max-w-5xl mx-auto w-full space-y-2 sm:space-y-4 pt-4 sm:pt-6 pb-4">
             {messages.map((message, index) => (
               <motion.div
                 key={index}
@@ -1575,10 +1618,11 @@ export default function ChatbotPage() {
               </motion.div>
             )}
           </div>
+          )}
         </div>
 
-        {/* Chat Input - Single Container with Smooth Animation */}
-        <div className={`chat-input-container ${hasStarted ? "dock" : "start"}`}>
+        {/* Chat Input */}
+        <div className="chat-input-container">
           <div className="chat-input">
             <div className="flex-1 min-w-0" data-onboarding="chat-input">
               <input

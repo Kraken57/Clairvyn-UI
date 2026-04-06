@@ -251,10 +251,18 @@ export const getUserChatSessions = async (
   console.log("[Clairvyn:chat] getUserChatSessions", { userId, hasToken: !!token });
   if (token) {
     try {
-      const backendSessions: any[] = await apiFetch(`/api/chats`, {
+      const raw = await apiFetch<unknown>(`/api/chats`, {
         method: "GET",
         token,
       });
+
+      // Guard: backend must return a JSON array - anything else falls through to local cache
+      if (!Array.isArray(raw)) {
+        console.warn("[Clairvyn:chat] getUserChatSessions: backend returned non-array", typeof raw);
+        throw new Error("Unexpected sessions response format");
+      }
+
+      const backendSessions = raw as any[];
       const converted: ChatSession[] = backendSessions.map((s) => ({
         id: String(s.id),
         userId,
@@ -330,6 +338,25 @@ export const deleteChatSession = async (
     return false;
   }
 };
+
+/** Wipe all locally-cached sessions and last-active pointer for a user (call on logout). */
+export function clearUserSessions(userId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(getStorageKey(userId));
+  } catch {
+    // ignore storage errors
+  }
+  // Also clear the last-active chatId pointer so a stale/recycled id
+  // can't be picked up by a subsequent login or different user.
+  try {
+    const map = readLastActiveChatMap();
+    delete map[userId];
+    localStorage.setItem(LAST_ACTIVE_CHAT_BY_USER_KEY, JSON.stringify(map));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 // Replace messages for a chat session (used after syncing with backend)
 export const setChatMessages = async (

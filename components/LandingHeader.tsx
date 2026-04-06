@@ -34,7 +34,7 @@ export function LandingHeader() {
     >
       <div className="mx-auto max-w-6xl touch:px-3 touch:pt-2 desktop:px-4 desktop:pt-4">
         <div className={glassBar}>
-          <div className="flex items-center justify-between touch:gap-3 touch:px-3 touch:py-2.5 desktop:gap-3 desktop:px-6 desktop:py-3">
+          <div className="relative flex items-center touch:gap-3 touch:px-3 touch:py-2.5 desktop:px-6 desktop:py-3">
             <Link href="/" className="flex min-w-0 shrink items-center gap-2 py-1">
               <Image
                 src="/light.png"
@@ -46,22 +46,23 @@ export function LandingHeader() {
               />
             </Link>
 
+            {/* Absolutely centered nav so it's always mid-bar regardless of logo/button widths */}
             <nav
-              className="hidden desktop:flex desktop:items-center desktop:gap-8"
+              className="pointer-events-none absolute inset-0 hidden desktop:flex desktop:items-center desktop:justify-center desktop:gap-8"
               aria-label="Primary"
             >
-              <Link href="/pricing" className={navLinkClass}>
+              <Link href="/pricing" className={cn(navLinkClass, "pointer-events-auto")}>
                 Pricing
               </Link>
-              <Link href="/about" className={navLinkClass}>
+              <Link href="/about" className={cn(navLinkClass, "pointer-events-auto")}>
                 About
               </Link>
-              <Link href="/blog" className={navLinkClass}>
+              <Link href="/blog" className={cn(navLinkClass, "pointer-events-auto")}>
                 Blog
               </Link>
             </nav>
 
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => router.push("/signin")}

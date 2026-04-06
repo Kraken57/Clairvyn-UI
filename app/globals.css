@@ -21,12 +21,10 @@
     font-size: 16px;
   }
 
-  /* Touch target optimization */
-  button,
+  /* Touch target optimization — checkbox/radio excluded: their wrapping label provides the touch target */
+  button:not([role="checkbox"]):not([role="radio"]),
   [role="button"],
-  a,
-  input[type="checkbox"],
-  input[type="radio"] {
+  a {
     /* Ensure minimum 44px touch target */
     min-height: 44px;
     min-width: 44px;
@@ -44,10 +42,7 @@
       padding: 12px;
     }
 
-    /* Support notched devices (iPhone X, etc.) */
-    .chat-input-container {
-      padding-bottom: max(16px, env(safe-area-inset-bottom));
-    }
+    /* Notch support is handled by .chat-input-container padding-bottom declaration */
 
     header {
       padding-top: max(12px, env(safe-area-inset-top));
@@ -223,7 +218,7 @@ select:focus-visible {
   }
   
   /* Improve touch targets */
-  button, [role="button"] {
+  button:not([role="checkbox"]):not([role="radio"]), [role="button"] {
     min-height: 44px;
     min-width: 44px;
   }
@@ -420,46 +415,24 @@ select:focus-visible {
     background-color: rgba(0, 0, 0, 0.8) !important;
   }
 
-/* Chat Input Container - Smooth Animation */
+/* Chat Input - always docked at the bottom of its flex-column parent (no fixed/absolute) */
 .chat-input-container {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(900px, 95vw);
-  z-index: 50;
-
-  /* smooth movement + resize */
-  transition:
-    bottom 420ms cubic-bezier(.22,.61,.36,1),
-    width 200ms ease;
-  will-change: bottom;
+  flex-shrink: 0;
+  width: 100%;
+  padding: 10px 16px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background-color: #f6f3ff; /* matches light chat-background */
 }
 
-/* Start near the middle of the screen */
-.chat-input-container.start {
-  bottom: 40vh; /* visually centered above mid */
-}
-
-/* After first prompt, dock to bottom */
-.chat-input-container.dock {
-  bottom: 16px;
+.dark .chat-input-container {
+  background-color: #1F1E1D; /* matches dark chatbot bg */
 }
 
 /* Mobile adjustments */
 @media (max-width: 640px) {
   .chat-input-container {
-    width: 96vw;
-    left: 2vw;
-    transform: none;
+    padding: 8px 10px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
-  }
-  
-  .chat-input-container.start {
-    bottom: 35vh;
-  }
-  
-  .chat-input-container.dock {
-    bottom: max(10px, env(safe-area-inset-bottom));
   }
 }
 
@@ -872,39 +845,49 @@ a:focus-visible {
   border-color: rgba(0, 0, 0, 0.2);
 }
 
-/* Dark mode for driver popover */
+/* Dark mode for driver popover — warm dark palette matching chatbot */
 .dark .driver-popover.clairvyn-driver-popover {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.96) 100%) !important;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 
-              0 8px 24px rgba(0, 0, 0, 0.3),
-              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: #2D2C2B !important;
+  border: 1px solid rgba(90, 85, 80, 0.5);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5),
+              0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-title {
-  color: #f1f5f9;
+  color: #F5E6D3;
 }
 
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-description {
-  color: #cbd5e1;
+  color: #B1ADA1;
 }
 
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer {
-  border-top-color: rgba(148, 163, 184, 0.2);
+  border-top-color: rgba(90, 85, 80, 0.4);
+}
+
+.dark .driver-popover.clairvyn-driver-popover .driver-popover-progress-text {
+  color: #B1ADA1;
 }
 
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-prev-btn,
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-close-btn {
-  background: rgba(148, 163, 184, 0.1);
-  color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(90, 85, 80, 0.3);
+  color: #B1ADA1;
+  border: 1px solid rgba(90, 85, 80, 0.4);
 }
 
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-prev-btn:hover,
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-close-btn:hover {
-  background: rgba(148, 163, 184, 0.2);
-  border-color: rgba(148, 163, 184, 0.3);
+  background: rgba(90, 85, 80, 0.5);
+  border-color: rgba(90, 85, 80, 0.6);
+  color: #F5E6D3;
 }
+
+/* Popover arrow — match warm dark background */
+.dark .driver-popover.clairvyn-driver-popover .driver-popover-arrow-side-top.driver-popover-arrow::before { border-top-color: #2D2C2B; }
+.dark .driver-popover.clairvyn-driver-popover .driver-popover-arrow-side-bottom.driver-popover-arrow::before { border-bottom-color: #2D2C2B; }
+.dark .driver-popover.clairvyn-driver-popover .driver-popover-arrow-side-left.driver-popover-arrow::before { border-left-color: #2D2C2B; }
+.dark .driver-popover.clairvyn-driver-popover .driver-popover-arrow-side-right.driver-popover-arrow::before { border-right-color: #2D2C2B; }
 
 /* Chat / app dark mode (html.dark only applied while on /chatbot with toggle on) */
 /* Elegant dark theme with warm color palette */
@@ -949,7 +932,7 @@ a:focus-visible {
 
 /* Light mode chat bubbles - only apply when NOT in dark mode */
 .chat-bubble-user {
-  background-color: #f0f0f0 !important;
+  background-color: #ebebeb !important;
   border: none !important;
   box-shadow: none !important;
   color: #1a1a1a !important;
@@ -965,8 +948,8 @@ a:focus-visible {
 }
 
 .chat-bubble-assistant {
-  background-color: transparent !important;
-  border: none !important;
+  background-color: rgba(255, 255, 255, 0.72) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
   box-shadow: none !important;
   color: #1a1a1a !important;
   outline: none !important;
@@ -1014,34 +997,6 @@ a:focus-visible {
 
 .dark .chat-input-field::placeholder {
   color: #B1ADA1 !important;
-}
-
-/* Light mode chat input */
-.chat-input {
-  background-color: white;
-  border: 1px solid #ddd;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-
-.chat-input-field {
-  background-color: transparent;
-  color: #1a1a1a;
-}
-
-.chat-input-field:focus {
-  outline: none;
-  box-shadow: none;
-  border-color: #999;
-}
-
-.chat-input-field:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
-.chat-input-field::placeholder {
-  color: #999;
 }
 
 /* Loading animation - improved for dark mode */
@@ -1720,9 +1675,9 @@ a:focus-visible {
   }
 
   .dark .chat-input {
-    background-color: #2a2a2a;
-    border-radius: 8px;
-    padding: 12px;
+    background-color: #2D2C2B;
+    border-radius: 12px;
+    padding: 6px 8px 6px 12px;
   }
 
   .dark .chat-input-field {
@@ -1734,7 +1689,7 @@ a:focus-visible {
   }
 
   /* Better touch targets on mobile */
-  .dark button:not(.chat-bubble-user) {
+  .dark button:not(.chat-bubble-user):not([role="checkbox"]):not([role="radio"]) {
     min-height: 44px;
     min-width: 44px;
   }

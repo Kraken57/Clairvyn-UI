@@ -31,6 +31,16 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
   const [success, setSuccess] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // localStorage helpers — keyed by uid so multiple accounts on same device don't bleed
+  const lsGet = (key: string) => {
+    if (typeof window === "undefined" || !user?.uid) return ""
+    try { return localStorage.getItem(`clairvyn_profile_${user.uid}_${key}`) ?? "" } catch { return "" }
+  }
+  const lsSet = (key: string, value: string) => {
+    if (typeof window === "undefined" || !user?.uid) return
+    try { localStorage.setItem(`clairvyn_profile_${user.uid}_${key}`, value) } catch { /* ignore */ }
+  }
+
   const [formData, setFormData] = useState<UserProfile>({
     displayName: user?.displayName || "",
     photoURL: user?.photoURL || profileImageUrl,
@@ -39,6 +49,7 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
     location: "",
   })
 
+  // Seed basic fields from Firebase user object
   useEffect(() => {
     if (user) {
       setFormData((prev) => ({
@@ -49,6 +60,47 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
       }))
     }
   }, [user, profileImageUrl])
+
+  // Fetch university + location from backend whenever the modal opens;
+  // fall back to localStorage so data survives even if backend doesn't persist it.
+  useEffect(() => {
+    if (!isOpen || !user) return
+    // Apply localStorage values immediately (instant, no flash)
+    setFormData((prev) => ({
+      ...prev,
+      university: prev.university || lsGet("university"),
+      location: prev.location || lsGet("location"),
+      photoURL: prev.photoURL || lsGet("photo") || null,
+    }))
+    let cancelled = false
+    getIdToken().then((token) => {
+      if (!token || cancelled) return
+      fetch(getBackendUrl("/api/me"), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled || !data) return
+          const profile = data.profile ?? data
+          const uni = profile.university ?? profile.institution ?? ""
+          const loc = profile.location ?? profile.city ?? ""
+          const photo = profile.photo_url ?? profile.photoURL ?? ""
+          setFormData((prev) => ({
+            ...prev,
+            university: uni || prev.university,
+            location: loc || prev.location,
+            photoURL: photo || prev.photoURL,
+          }))
+          // Keep localStorage in sync with what the server returned
+          if (uni)    lsSet("university", uni)
+          if (loc)    lsSet("location", loc)
+          if (photo)  lsSet("photo", photo)
+        })
+        .catch(() => {})
+    })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, user?.uid])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -84,6 +136,11 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
       reader.onloadend = async () => {
         try {
           const base64String = reader.result as string
+
+          // Optimistic update — show preview immediately
+          setFormData((prev) => ({ ...prev, photoURL: base64String }))
+          lsSet("photo", base64String)
+
           const token = await getIdToken()
           
           if (!token) {
@@ -108,15 +165,10 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
             throw new Error("Failed to upload photo")
           }
 
-          setFormData((prev) => ({
-            ...prev,
-            photoURL: base64String,
-          }))
-
           setSuccess("Photo updated!")
           setTimeout(() => setSuccess(""), 2000)
         } catch (err) {
-          setError("Failed to upload photo. Please try again.")
+          setError("Photo saved locally but couldn't sync to server.")
           setTimeout(() => setError(""), 3000)
         } finally {
           setIsLoading(false)
@@ -167,6 +219,11 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
           location: formData.location,
         }),
       })
+
+      // Persist to localStorage regardless of whether the backend saves university/location,
+      // so the fields survive a page reload even if the backend hasn't implemented them yet.
+      lsSet("university", formData.university ?? "")
+      lsSet("location", formData.location ?? "")
 
       if (!response.ok) {
         throw new Error("Failed to update profile")
