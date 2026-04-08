@@ -42,7 +42,7 @@ export function handleScriptedInput(
       addMessage({
         id: Date.now(),
         type: 'assistant',
-        content: "Clairvyn generates residential floor plans from your description.\n\nWhat it does:\n• Up to 4 BHK layouts\n• Includes core rooms and spaces\n• Edit after generation: resize, move, adjust\n\nIn progress: electrical, plumbing, structural, multi-floor, more rooms\n\nStart by describing area, rooms, and requirements.",
+        content: "Clairvyn 1.0 is a pilot floor plan generator that allows you to design up to 4 BHK residential layouts. You can customise dimensions, furniture placements, and export the output in DXF or PNG formats based on your requirements.\n\nFor example, simply enter a prompt such as: \"Design a 3 BHK apartment with a study and garage, with a total area of 300 sq. meters\"",
         timestamp: new Date().toISOString()
       });
       setTyping(false);
@@ -87,7 +87,7 @@ export function handleScriptedInput(
     addMessage({
       id: Date.now(),
       role: "assistant",
-      content: `Clairvyn generates residential floor plans from your description.\n\nWhat it does:\n• Up to 4 BHK layouts\n• Includes core rooms and spaces\n• Edit after generation: resize, move, adjust\n\nIn progress: electrical, plumbing, structural, multi-floor, more rooms\n\nStart by describing area, rooms, and requirements.`,
+      content: `Clairvyn 1.0 is a pilot floor plan generator that allows you to design up to 4 BHK residential layouts. You can customise dimensions, furniture placements, and export the output in DXF or PNG formats based on your requirements.\n\nFor example, simply enter a prompt such as: "Design a 3 BHK apartment with a study and garage, with a total area of 300 sq. meters"`,
       timestamp: new Date().toISOString(),
     })
     return true

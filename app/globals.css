@@ -433,20 +433,29 @@ select:focus-visible {
 
 .dark .chat-input-container {
   background: transparent;
+  border-top: 1px solid rgba(255,255,255,0.06);
 }
 
 /* Mobile adjustments */
 @media (max-width: 640px) {
   .chat-input-container {
-    padding: 4px 10px;
-    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    padding: 5px 10px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Mobile: ensure input container stays above keyboard */
+@supports (-webkit-touch-callout: none) {
+  .chat-input-container {
+    /* iOS safe-area awareness for home indicator */
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
 }
 
 /* The actual input shell */
 .chat-input {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
   max-width: 768px;
   margin: 0 auto;
@@ -477,6 +486,7 @@ select:focus-visible {
   border-radius: 26px;
   padding: 12px 10px 12px 22px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.09), 0 1px 4px rgba(0, 0, 0, 0.05);
+  align-items: center;
 }
 
 .chat-input--centered .chat-input-field {
@@ -505,8 +515,8 @@ select:focus-visible {
 @media (max-width: 640px) {
   .chat-input {
     gap: 6px;
-    padding: 5px 6px 5px 14px;
-    border-radius: 20px;
+    padding: 6px 6px 6px 16px;
+    border-radius: 24px;
   }
 }
 
@@ -515,11 +525,22 @@ select:focus-visible {
   flex: 1 1 auto;
   border: none;
   outline: none;
-  font-size: 15px;
-  line-height: 1.4;
-  padding: 2px 0;
+  resize: none;
+  overflow-y: auto;
+  font-size: 16px; /* ≥16px prevents iOS auto-zoom on focus */
+  font-family: inherit;
+  line-height: 1.5;
+  padding: 4px 0;
+  max-height: 200px;
   background: transparent;
   color: #1f2937;
+  touch-action: manipulation; /* prevents 300ms delay and accidental double-tap zoom */
+  scrollbar-width: none; /* hide scrollbar — height expands instead */
+  -webkit-appearance: none;
+}
+
+.chat-input-field::-webkit-scrollbar {
+  display: none;
 }
 
 .chat-input-field:focus {
@@ -536,11 +557,15 @@ select:focus-visible {
   color: #9ca3af;
 }
 
-/* Mobile adjustments for input field */
 @media (max-width: 640px) {
-  .chat-input-field {
-    font-size: 16px; /* Prevent zoom on iOS */
+  .chat-input-field::placeholder {
+    font-size: 13px;
   }
+}
+
+/* touch-action on send button to prevent accidental double-tap zoom */
+.send-btn {
+  touch-action: manipulation;
 }
 
 /* Button kept inside the same block so centering is perfect */
@@ -573,10 +598,17 @@ select:focus-visible {
 /* Mobile adjustments for send button */
 @media (max-width: 640px) {
   .send-btn {
-    height: 30px;
-    width: 30px;
-    min-width: 30px;
+    height: 34px;
+    width: 34px;
+    min-height: 34px !important;
+    min-width: 34px !important;
+    flex-shrink: 0;
     padding: 0;
+  }
+
+  /* Give the input field more room by limiting the button's visual footprint */
+  .chat-input {
+    padding-right: 5px;
   }
 }
 
@@ -877,16 +909,19 @@ a:focus-visible {
 
 .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-next-btn,
 .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-done-btn {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  color: white;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  background: #1A1918 !important;
+  background-color: #1A1918 !important;
+  color: #F5E6D3 !important;
+  box-shadow: none !important;
 }
 
 .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-next-btn:hover,
 .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-done-btn:hover {
-  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
-  transform: translateY(-2px);
+  background: #2D2C2B !important;
+  background-color: #2D2C2B !important;
+  color: #F5E6D3 !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-prev-btn,
@@ -967,17 +1002,18 @@ a:focus-visible {
 
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-next-btn,
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-done-btn {
-  background: #4f46e5 !important;
-  background-color: #4f46e5 !important;
-  color: #ffffff !important;
-  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.4) !important;
+  background: #F5E6D3 !important;
+  background-color: #F5E6D3 !important;
+  color: #1A1918 !important;
+  box-shadow: none !important;
 }
 
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-next-btn:hover,
 .dark .driver-popover.clairvyn-driver-popover .driver-popover-footer button.driver-popover-done-btn:hover {
-  background: #4338ca !important;
-  background-color: #4338ca !important;
-  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.5) !important;
+  background: #eddfc9 !important;
+  background-color: #eddfc9 !important;
+  color: #1A1918 !important;
+  box-shadow: none !important;
 }
 
 /* Popover arrow — match warm dark background */
@@ -1001,6 +1037,8 @@ a:focus-visible {
   box-shadow: none !important;
   color: #F5E6D3 !important;
   outline: none !important;
+  padding: 10px 16px !important;
+  border-radius: 18px 18px 4px 18px !important;
 }
 
 .dark .chat-bubble-user a {
@@ -1029,11 +1067,13 @@ a:focus-visible {
 
 /* Light mode chat bubbles - only apply when NOT in dark mode */
 .chat-bubble-user {
-  background-color: #ebebeb !important;
+  background-color: #ede9fe !important;
   border: none !important;
   box-shadow: none !important;
   color: #1a1a1a !important;
   outline: none !important;
+  padding: 10px 16px !important;
+  border-radius: 18px 18px 4px 18px !important;
 }
 
 .chat-bubble-user a {
@@ -1741,12 +1781,12 @@ a:focus-visible {
 
   .dark .chat-input {
     background-color: #2D2C2B;
-    border-radius: 20px;
-    padding: 5px 6px 5px 14px;
+    border-radius: 24px;
+    padding: 6px 6px 6px 16px;
   }
 
   .dark .chat-input-field {
-    font-size: 14px;
+    font-size: 16px; /* must be ≥16px to prevent iOS auto-zoom on focus */
   }
 
   .dark .chat-loading-text {
@@ -2061,4 +2101,32 @@ a:focus-visible {
 
 .dark .greeting-headline {
   color: #F5F5F3;
+}
+
+/* ── House loader animation ─────────────────────────────────── */
+.house-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.house-outline {
+  animation: drawHouse 2.5s ease-in-out infinite;
+}
+
+@keyframes drawHouse {
+  0%   { stroke-dashoffset: 120; }
+  40%  { stroke-dashoffset: 0; }
+  60%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 120; }
+}
+
+.house-outline-landing {
+  animation: drawHouseLanding 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+
+@keyframes drawHouseLanding {
+  0%   { stroke-dashoffset: 120; opacity: 0.6; }
+  50%  { stroke-dashoffset: 0;   opacity: 1;   }
+  100% { stroke-dashoffset: 120; opacity: 0.6; }
 }

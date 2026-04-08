@@ -40,7 +40,7 @@ export function useClairvynOnboarding({
   }, [])
 
   const applyPopoverTheme = useCallback(() => {
-    if (!isDark()) return
+    const dark = isDark()
     const popover = document.querySelector<HTMLElement>(".driver-popover.clairvyn-driver-popover")
     if (!popover) return
 
@@ -49,20 +49,22 @@ export function useClairvynOnboarding({
       Object.entries(props).forEach(([k, v]) => el.style.setProperty(k, v, "important"))
     }
 
-    set(popover, {
-      "background": "#2D2C2B",
-      "background-color": "#2D2C2B",
-      "border": "1px solid rgba(255,255,255,0.1)",
-      "box-shadow": "0 24px 64px rgba(0,0,0,0.6), 0 8px 24px rgba(0,0,0,0.4)",
-      "color": "#F5E6D3",
-      "padding": "28px",
-      "border-radius": "20px",
-      "max-width": "min(420px, 90vw)",
-    })
+    if (dark) {
+      set(popover, {
+        "background": "#2D2C2B",
+        "background-color": "#2D2C2B",
+        "border": "1px solid rgba(255,255,255,0.1)",
+        "box-shadow": "0 24px 64px rgba(0,0,0,0.6), 0 8px 24px rgba(0,0,0,0.4)",
+        "color": "#F5E6D3",
+        "padding": "28px",
+        "border-radius": "20px",
+        "max-width": "min(420px, 90vw)",
+      })
+    }
 
     const title = popover.querySelector<HTMLElement>(".driver-popover-title")
     if (title) set(title, {
-      "color": "#F5E6D3",
+      "color": dark ? "#F5E6D3" : "#0f172a",
       "font-size": "1.4rem",
       "font-weight": "700",
       "letter-spacing": "-0.02em",
@@ -75,7 +77,7 @@ export function useClairvynOnboarding({
 
     const desc = popover.querySelector<HTMLElement>(".driver-popover-description")
     if (desc) set(desc, {
-      "color": "#C8C4BC",
+      "color": dark ? "#C8C4BC" : "#475569",
       "font-size": "1rem",
       "line-height": "1.65",
       "margin": "0",
@@ -99,7 +101,7 @@ export function useClairvynOnboarding({
 
     const progress = popover.querySelector<HTMLElement>(".driver-popover-progress-text")
     if (progress) set(progress, {
-      "color": "#8A8680",
+      "color": dark ? "#8A8680" : "#64748b",
       "font-size": "0.82rem",
       "background": "transparent",
       "background-color": "transparent",
@@ -107,7 +109,7 @@ export function useClairvynOnboarding({
 
     const closeBtn = popover.querySelector<HTMLElement>(".driver-popover-close-btn")
     if (closeBtn) set(closeBtn, {
-      "color": "#8A8680",
+      "color": dark ? "#8A8680" : "#64748b",
       "background": "transparent",
       "background-color": "transparent",
       "box-shadow": "none",
@@ -118,10 +120,10 @@ export function useClairvynOnboarding({
 
     const prevBtn = popover.querySelector<HTMLElement>(".driver-popover-prev-btn")
     if (prevBtn) set(prevBtn, {
-      "background": "rgba(255,255,255,0.08)",
-      "background-color": "rgba(255,255,255,0.08)",
-      "color": "#B1ADA1",
-      "border": "1px solid rgba(255,255,255,0.12)",
+      "background": dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+      "background-color": dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+      "color": dark ? "#B1ADA1" : "#0f172a",
+      "border": dark ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(0,0,0,0.1)",
       "border-radius": "10px",
       "padding": "9px 18px",
       "font-size": "0.9rem",
@@ -134,16 +136,16 @@ export function useClairvynOnboarding({
     const nextBtn = popover.querySelector<HTMLElement>(".driver-popover-next-btn")
       ?? popover.querySelector<HTMLElement>(".driver-popover-done-btn")
     if (nextBtn) set(nextBtn, {
-      "background": "#4f46e5",
-      "background-color": "#4f46e5",
-      "color": "#ffffff",
+      "background": dark ? "#F5E6D3" : "#1A1918",
+      "background-color": dark ? "#F5E6D3" : "#1A1918",
+      "color": dark ? "#1A1918" : "#F5E6D3",
       "border": "none",
       "border-radius": "10px",
       "padding": "9px 18px",
       "font-size": "0.9rem",
       "font-weight": "600",
       "text-shadow": "none",
-      "box-shadow": "0 2px 10px rgba(79,70,229,0.4)",
+      "box-shadow": "none",
       "cursor": "pointer",
     })
 
@@ -187,6 +189,9 @@ export function useClairvynOnboarding({
         nextBtnText: "Next",
         prevBtnText: "Back",
         doneBtnText: "Done",
+        onPopoverRender: () => {
+          applyPopoverTheme()
+        },
         onDestroyStarted: (_el, _step, { driver: d }) => {
           d.destroy()
           driverRef.current = null
@@ -194,11 +199,9 @@ export function useClairvynOnboarding({
         },
         onNextClick: (_el, _step, { driver: d }) => {
           d.moveNext()
-          window.setTimeout(applyPopoverTheme, 10)
         },
         onPrevClick: (_el, _step, { driver: d }) => {
           d.movePrevious()
-          window.setTimeout(applyPopoverTheme, 10)
         },
         onOverlayClick: (_el, _step, { driver: d }) => {
           if (d.isLastStep()) {
@@ -206,7 +209,6 @@ export function useClairvynOnboarding({
             markFinished()
           } else {
             d.moveNext()
-            window.setTimeout(applyPopoverTheme, 10)
           }
         },
         steps: [
@@ -231,7 +233,9 @@ export function useClairvynOnboarding({
               setIsSidebarOpen(false)
             },
             onHighlighted: (_el, _step, { driver: d }) => {
-              window.setTimeout(() => d.refresh(), LAYOUT_MS)
+              window.setTimeout(() => {
+                d.refresh()
+              }, LAYOUT_MS)
             },
           },
           {
@@ -253,7 +257,9 @@ export function useClairvynOnboarding({
             },
             onHighlighted: (_el, _step, { driver: d }) => {
               setIsSidebarOpen(true)
-              window.setTimeout(() => d.refresh(), LAYOUT_MS)
+              window.setTimeout(() => {
+                d.refresh()
+              }, LAYOUT_MS)
             },
           },
           {
@@ -266,7 +272,9 @@ export function useClairvynOnboarding({
             },
             onHighlighted: (_el, _step, { driver: d }) => {
               setIsSidebarOpen(true)
-              window.setTimeout(() => d.refresh(), LAYOUT_MS)
+              window.setTimeout(() => {
+                d.refresh()
+              }, LAYOUT_MS)
             },
           },
         ],
@@ -274,7 +282,6 @@ export function useClairvynOnboarding({
 
       driverRef.current = driverObj
       driverObj.drive(0)
-      window.setTimeout(applyPopoverTheme, 50)
     }, START_DELAY_MS)
   }, [authLoading, userUid, applyPopoverTheme, setIsSidebarOpen, clearScheduledTour])
 

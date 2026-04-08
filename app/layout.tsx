@@ -34,7 +34,6 @@ export const metadata: Metadata = {
   icons: {
     icon: '/logo.png',
   },
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover",
   description:
     "Design Architectural Floor Plans using Simple Prompts.",
   keywords: "architecture, design, AI, challenges, education, floor plan, building design, Clairvyn",
@@ -45,6 +44,9 @@ export const metadata: Metadata = {
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover' as const,
+  interactiveWidget: 'resizes-content' as const,
 }
 
 export default function RootLayout({

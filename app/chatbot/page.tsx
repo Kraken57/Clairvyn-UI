@@ -13,7 +13,6 @@ import {
   Settings,
   LogOut,
   LogIn,
-  History,
   Plus,
   Trash2,
   Download,
@@ -284,6 +283,30 @@ export default function ChatbotPage() {
     }
   }, [user, authLoading])
 
+  // Smooth keyboard handling on mobile — prevents the "zoom/snap" when the
+  // soft keyboard opens by scrolling the focused input into view gently.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const vv = window.visualViewport
+    if (!vv) return
+
+    const onViewportResize = () => {
+      const active = document.activeElement
+      if (
+        active instanceof HTMLElement &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA")
+      ) {
+        // Small delay lets the keyboard fully settle before scrolling
+        setTimeout(() => {
+          active.scrollIntoView({ block: "nearest", behavior: "smooth" })
+        }, 50)
+      }
+    }
+
+    vv.addEventListener("resize", onViewportResize)
+    return () => vv.removeEventListener("resize", onViewportResize)
+  }, [])
+
   // Fetch has_paid / profile image; require backend profile country for signed-in (non-guest) users
   useEffect(() => {
     if (!user) {
@@ -320,6 +343,7 @@ export default function ChatbotPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [typing, setTyping] = useState(false)
   const [inputValue, setInputValue] = useState("")
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [placeholderText, setPlaceholderText] = useState("Design a Floor-plan for a 3BHK House")
   const [isFirstSubmit, setIsFirstSubmit] = useState<boolean>(true)
   const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
@@ -337,6 +361,7 @@ export default function ChatbotPage() {
   const [backendChatId, setBackendChatId] = useState<string | null>(null)
   const [showGuestBanner, setShowGuestBanner] = useState(true)
   const [hasStarted, setHasStarted] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const [feedbackByMessage, setFeedbackByMessage] = useState<Record<string, MessageFeedbackState>>({})
   const [feedbackSubmittingByMessage, setFeedbackSubmittingByMessage] = useState<Record<string, boolean>>({})
   const [waitlistOpen, setWaitlistOpen] = useState(false)
@@ -349,6 +374,19 @@ export default function ChatbotPage() {
   const initStartedForUidRef = useRef<string | null>(null)
   // Guard to prevent concurrent handleSubmit calls (e.g. rapid double-click before React re-renders)
   const submittingRef = useRef(false)
+
+  // Auto-resize textarea as inputValue changes
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [inputValue])
+
+  // Scroll to bottom whenever messages update or loading state changes
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, isLoading])
 
   const getFeedbackKey = (message: ChatMessage, index: number): string => {
     const id = (message as any)?.id
@@ -438,8 +476,11 @@ export default function ChatbotPage() {
         console.log("[Clairvyn] initChat: sessions loaded", { count: sessions.length });
         setChatSessions(sessions)
         if (sessions.length === 0) {
-          console.log("[Clairvyn] initChat: no sessions, creating new chat");
-          await createNewChat()
+          // No sessions yet — don't persist anything; wait for first message
+          console.log("[Clairvyn] initChat: no sessions, starting blank")
+          setCurrentChatId(null)
+          setMessages([])
+          setHasStarted(false)
         } else {
           const preferredId = getLastActiveChatId(uid)
           const fallbackId = sessions[0].id
@@ -535,41 +576,16 @@ export default function ChatbotPage() {
     }
   }, [user, profileImageUrl])
 
-  const createNewChat = async () => {
-    console.log("[Clairvyn] createNewChat called", { hasUser: !!user });
-    if (user) {
-      setIsLoading(true)
-      try {
-        let localId: string | null = null
-        const token = await getIdToken()
-        if (token) {
-          try {
-            const data = await apiFetch<{ id: string; title: string | null; metadata: any }>(
-              "/api/chats",
-              { method: "POST", body: { title: null, metadata: {} }, token }
-            )
-            localId = typeof data.id === "number" ? String(data.id) : data.id
-            setBackendChatId(localId)
-            console.log("[Clairvyn] createNewChat: backend chat created", { id: localId, title: data.title });
-          } catch (err) {
-            console.warn("[Clairvyn] createNewChat: backend create failed", err)
-          }
-        }
-
-        const chatId = await createChatSession(user.uid, localId || undefined)
-        setCurrentChatId(chatId)
-        setLastActiveChatId(user.uid, chatId)
-        if (!localId) setBackendChatId(null)
-
-        setMessages([])
-        setHasStarted(false)
-        console.log("[Clairvyn] createNewChat: done", { chatId, backendId: localId });
-      } catch (error) {
-        console.error("[Clairvyn] createNewChat error", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const createNewChat = () => {
+    // Guard: already on a blank unsaved chat — nothing to do
+    if (!hasStarted && currentChatId === null) return
+    setMessages([])
+    setHasStarted(false)
+    setCurrentChatId(null)
+    setBackendChatId(null)
+    setInputValue("")
+    if (textareaRef.current) textareaRef.current.style.height = "auto"
+    console.log("[Clairvyn] createNewChat: reset to blank (will persist on first message)")
   }
 
   const ensureBackendChat = async (): Promise<string | null> => {
@@ -645,6 +661,9 @@ export default function ChatbotPage() {
 
     // Clear input and update placeholder for next turn
     setInputValue("")
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+    }
     if (isFirstSubmit) {
       setPlaceholderText(getContextualSuggestion(normalized))
       setIsFirstSubmit(false)
@@ -675,11 +694,29 @@ export default function ChatbotPage() {
 
     setIsTurnInFlight(true)
     setIsLoading(true)
-    console.log("[Clairvyn] handleSubmit: start", { userText: userText.slice(0, 50), currentChatId, hasUser: !!user });
+
+    // Lazily create the local chat session on the very first message
+    let activeChatId = currentChatId
+    if (!activeChatId && user) {
+      const newId = await createChatSession(user.uid)
+      activeChatId = newId
+      setCurrentChatId(newId)
+      setLastActiveChatId(user.uid, newId)
+      setChatSessions(prev => [{
+        id: newId,
+        userId: user.uid,
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }, ...prev])
+      console.log("[Clairvyn] handleSubmit: created new session on first message", { newId })
+    }
+
+    console.log("[Clairvyn] handleSubmit: start", { userText: userText.slice(0, 50), activeChatId, hasUser: !!user });
 
     try {
-      if (user && currentChatId) {
-        await addMessageToChat(user.uid, currentChatId, userMessage)
+      if (user && activeChatId) {
+        await addMessageToChat(user.uid, activeChatId, userMessage)
       }
 
       const token = await getIdToken()
@@ -749,8 +786,8 @@ export default function ChatbotPage() {
         feedback_submitted: Boolean(m.feedback_submitted),
       }));
 
-      if (currentChatId && user) {
-        await setChatMessages(user.uid, currentChatId, updatedHistory)
+      if (activeChatId && user) {
+        await setChatMessages(user.uid, activeChatId, updatedHistory)
       }
 
       setMessages(updatedHistory)
@@ -773,11 +810,11 @@ export default function ChatbotPage() {
       }
 
       // Optimistically set chat title in sidebar from first user message
-      if (currentChatId) {
+      if (activeChatId) {
         const titleFromMessage = userText.slice(0, 80).trim() || "New chat"
         setChatSessions((prev) =>
           prev.map((s) =>
-            s.id === currentChatId ? { ...s, title: s.title ?? titleFromMessage } : s
+            s.id === activeChatId ? { ...s, title: s.title ?? titleFromMessage } : s
           )
         )
       }
@@ -1073,7 +1110,6 @@ export default function ChatbotPage() {
 
   const sidebarItems = [
     { icon: Plus, label: "New Chat", action: createNewChat },
-    { icon: History, label: "History", action: handleHistory },
     { icon: Home, label: "Home", action: handleGoHome },
   ]
 
@@ -1233,9 +1269,7 @@ export default function ChatbotPage() {
                       </p>
                     ) : historyLoading ? (
                       <div className="flex items-center justify-center py-6">
-                        <div className="w-5 h-5">
-                          <LandingPageLoader />
-                        </div>
+                        <div className="w-5 h-5 rounded-full border-2 border-gray-200 dark:border-gray-600 border-t-gray-500 dark:border-t-gray-300 animate-spin" />
                       </div>
                     ) : chatSessions.length === 0 ? (
                       <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -1341,7 +1375,7 @@ export default function ChatbotPage() {
         <main className="flex-1 flex flex-col min-h-0">
           {/* Top bar (matches screenshot: hamburger on mobile, title center, search right) */}
           <header className="relative chat-header">
-            <div className={`flex items-center gap-1 transition-all duration-300 ${hasStarted ? 'h-14 sm:h-16 lg:h-[72px] px-3 sm:px-8 lg:px-10' : 'h-16 sm:h-20 px-3 sm:px-8'}`}>
+            <div className={`flex items-center gap-1 transition-all duration-300 ${hasStarted ? 'h-8 sm:h-16 lg:h-[72px] px-1 sm:px-8 lg:px-10' : 'h-16 sm:h-20 px-3 sm:px-8'}`}>
               <motion.button
                 onClick={() => setIsSidebarOpen(true)}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-transparent transition-colors outline-none"
@@ -1354,7 +1388,7 @@ export default function ChatbotPage() {
 
               <div className="flex-1 flex items-center justify-center pointer-events-none min-w-0">
                 <div className="text-center truncate">
-                  <div className="font-semibold text-gray-800 dark:text-gray-100 truncate text-base sm:text-lg">
+                  <div className={`font-semibold text-gray-800 dark:text-gray-100 truncate ${hasStarted ? 'text-sm sm:text-lg' : 'text-base sm:text-lg'}`}>
                     Clairvyn 1.0
                   </div>
                 </div>
@@ -1391,8 +1425,9 @@ export default function ChatbotPage() {
               transition={{ duration: 0.5, delay: 0.15 }}
             >
               <div className="chat-input w-full chat-input--centered" data-onboarding="chat-input">
-                <input
-                  type="text"
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={(e) => {
@@ -1405,7 +1440,7 @@ export default function ChatbotPage() {
                   className="chat-input-field w-full min-w-0"
                   disabled={isLoading}
                   autoComplete="off"
-                  spellCheck="true"
+                  spellCheck={true}
                 />
                 <motion.button
                   type="button"
@@ -1419,7 +1454,7 @@ export default function ChatbotPage() {
                   onHoverEnd={() => setIsPencilHovered(false)}
                 >
                   {isLoading ? (
-                    <div className="w-5 h-5"><LandingPageLoader /></div>
+                    <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
                   ) : (
                     <motion.div
                       animate={isPencilHovered ? { rotate: [0, -10, 10, -5, 0] } : {}}
@@ -1447,7 +1482,7 @@ export default function ChatbotPage() {
         ) : (
           <>
             <div className="scrollbar-main flex-1 overflow-y-auto flex flex-col px-3 sm:px-6">
-              <div className="max-w-3xl lg:max-w-[700px] mx-auto w-full space-y-2 sm:space-y-5 lg:space-y-9 pt-3 sm:pt-8 lg:pt-14 pb-2">
+              <div className="max-w-3xl lg:max-w-[700px] mx-auto w-full space-y-3 sm:space-y-5 lg:space-y-9 pt-1 sm:pt-8 lg:pt-14 pb-2">
             {messages.map((message, index) => (
               <motion.div
                 key={index}
@@ -1462,7 +1497,11 @@ export default function ChatbotPage() {
                     : 'text-gray-800 dark:text-gray-100 min-w-[200px] sm:min-w-[320px] chat-bubble-assistant'
                     }`}
                 >
-                  <p className="text-xs sm:text-base leading-relaxed lg:text-[15.5px] lg:leading-[1.78]">{message.content}</p>
+                  <div className="text-xs sm:text-base leading-relaxed lg:text-[15.5px] lg:leading-[1.78] space-y-1">
+                    {message.content.split('\n').map((line: string, i: number) => (
+                      line === '' ? <div key={i} className="h-2" /> : <p key={i}>{line}</p>
+                    ))}
+                  </div>
                   {/* Support for image/extra data and description (demo script + backend responses) */}
                   {(message as any).image || (message as any).image_url || (message as any).extra_data?.png_url || (message as any).extra_data?.dxf_url || (message as any).extra_data?.document_id ? (
                     <div className="mt-3 space-y-2">
@@ -1666,14 +1705,17 @@ export default function ChatbotPage() {
                 </div>
               </motion.div>
             )}
+              {/* Scroll anchor */}
+              <div ref={messagesEndRef} />
               </div>
             </div>
 
             {/* Chat Input - bottom docked */}
             <div className="chat-input-container">
               <div className="chat-input" data-onboarding="chat-input">
-                <input
-                  type="text"
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={(e) => {
@@ -1686,7 +1728,7 @@ export default function ChatbotPage() {
                   className="chat-input-field w-full min-w-0"
                   disabled={isLoading}
                   autoComplete="off"
-                  spellCheck="true"
+                  spellCheck={true}
                 />
                 <motion.button
                   type="button"
@@ -1700,9 +1742,7 @@ export default function ChatbotPage() {
                   onHoverEnd={() => setIsPencilHovered(false)}
                 >
                   {isLoading ? (
-                    <div className="w-5 h-5">
-                      <LandingPageLoader />
-                    </div>
+                    <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
                   ) : (
                     <motion.div
                       animate={isPencilHovered ? { rotate: [0, -10, 10, -5, 0] } : {}}
@@ -1715,7 +1755,7 @@ export default function ChatbotPage() {
               </div>
 
               {/* Disclaimer */}
-              <div className="flex items-center justify-center gap-1.5 mt-1">
+              <div className="flex items-center justify-center gap-1.5 mt-0.5">
                 <span className="text-xs text-gray-500 dark:text-gray-400">
                   Clairvyn can make mistakes
                 </span>
@@ -1800,32 +1840,7 @@ export default function ChatbotPage() {
         )}
       </AnimatePresence>
 
-      <style jsx>{`
-        .house-loader {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
 
-        .house-outline {
-          animation: drawHouse 2.5s ease-in-out infinite;
-        }
-
-        @keyframes drawHouse {
-          0% {
-            stroke-dashoffset: 120;
-          }
-          40% {
-            stroke-dashoffset: 0;
-          }
-          60% {
-            stroke-dashoffset: 0;
-          }
-          100% {
-            stroke-dashoffset: 120;
-          }
-        }
-      `}</style>
     </div>
   )
 }

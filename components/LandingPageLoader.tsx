@@ -8,10 +8,11 @@ export default function LandingPageLoader() {
   return (
     <div className="flex items-center justify-center" aria-hidden>
       {/* House Building Animation - Optimized for landing page */}
-      <div className="flex-shrink-0 w-8 h-8 landing-page-loader">
+      <div className="flex-shrink-0" style={{ width: 32, height: 32 }}>
         <svg
           viewBox="0 0 64 64"
-          className="w-full h-full"
+          width="32"
+          height="32"
           preserveAspectRatio="xMidYMid meet"
         >
           {/* House outline */}
@@ -27,34 +28,6 @@ export default function LandingPageLoader() {
           />
         </svg>
       </div>
-
-      <style jsx>{`
-        .landing-page-loader {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          will-change: transform;
-        }
-
-        .house-outline-landing {
-          animation: drawHouseLanding 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
-        }
-
-        @keyframes drawHouseLanding {
-          0% {
-            stroke-dashoffset: 120;
-            opacity: 0.6;
-          }
-          50% {
-            stroke-dashoffset: 0;
-            opacity: 1;
-          }
-          100% {
-            stroke-dashoffset: 120;
-            opacity: 0.6;
-          }
-        }
-      `}</style>
     </div>
   )
 }

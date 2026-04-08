@@ -6,6 +6,8 @@ import {
   afternoonGreetings,
   eveningGreetings,
   nightGreetings,
+  generalGreetings,
+  returningGreetings,
   fallbackNames,
 } from "./greetings"
 
