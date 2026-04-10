@@ -766,8 +766,46 @@ export default function ChatbotPage() {
         setBackendChatId(String(data.chat_id))
       }
 
-      // Replace messages with server history (backend returns history array)
-      const raw: any = data;
+      // If backend returned a task_id, poll until done
+      let finalData = data;
+      if (data.task_id && !data.history) {
+        const resolvedChatId = data.chat_id ?? chatId;
+        const taskId = data.task_id;
+        const POLL_INTERVAL_MS = 4000;
+        const MAX_POLLS = 75; // 5 minutes max
+        let polls = 0;
+        await new Promise<void>((resolve, reject) => {
+          const interval = setInterval(async () => {
+            polls++;
+            if (polls > MAX_POLLS) {
+              clearInterval(interval);
+              reject(new Error("Floor plan generation timed out. Please try again."));
+              return;
+            }
+            try {
+              const pollData = await apiFetch<any>(
+                `/api/chats/${encodeURIComponent(resolvedChatId)}/tasks/${encodeURIComponent(taskId)}`,
+                { method: "GET", token }
+              );
+              if (pollData.status === "SUCCESS") {
+                clearInterval(interval);
+                finalData = pollData;
+                resolve();
+              } else if (pollData.status === "FAILURE") {
+                clearInterval(interval);
+                reject(new Error(pollData.error || "Floor plan generation failed."));
+              }
+              // PENDING or STARTED — keep polling
+            } catch (e) {
+              clearInterval(interval);
+              reject(e);
+            }
+          }, POLL_INTERVAL_MS);
+        });
+      }
+
+      // Replace messages with server history
+      const raw: any = finalData;
       const array: any[] = Array.isArray(raw?.history)
         ? raw.history
         : Array.isArray(raw?.messages)
@@ -791,11 +829,9 @@ export default function ChatbotPage() {
       }
 
       setMessages(updatedHistory)
-      console.log("[Clairvyn] handleSubmit: success", { historyLength: updatedHistory.length, assistantContent: (data as any)?.assistant_message?.content });
+      console.log("[Clairvyn] handleSubmit: success", { historyLength: updatedHistory.length, assistantContent: (finalData as any)?.assistant_message?.content });
 
       // Only count a generation when the backend actually produced a floor plan
-      // (extra_data.document_id or extra_data.png_url present on the last assistant message).
-      // Pure conversational replies don't consume the quota. Founders are never counted.
       if (!hasPaid && !isFounder && user) {
         const lastAssistant = updatedHistory.filter((m) => m.role === "assistant").pop()
         const producedFloorPlan = Boolean(
