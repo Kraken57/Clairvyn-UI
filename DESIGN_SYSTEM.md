@@ -11,21 +11,27 @@ This document outlines the comprehensive design system upgrades made to create a
 - Ensures consistent, clean light-mode aesthetic across marketing pages
 
 ### 2. **Color Consolidation**
-**Primary Brand Color:** `#1e2bd6` (Indigo)
-- Replaced all variations (`#4f46e5`, `#6366f1`, `indigo-600`, etc.) with primary
+**Primary Brand Color:** `#7C5CBF` (Violet)
+- Replaced all variations (`#4f46e5`, `#6366f1`, `indigo-600`, `#1e2bd6`, etc.) with violet palette
 - Applied to all buttons, links, and accent elements
-- Dark variant for hover states: `#1a24b8`
-- Light variant for backgrounds: `#f0f4ff`
+- Hover variant: `#5A3A9E`
+- Secondary: `#9B7FD4`
+- Tint: `#EDE8FA`
+- Light variant for backgrounds: `#F8F5FF`
+- Accent: `#8B5CF6` / `#6D28D9`
 
 **Text Colors:**
-- Primary: `#0f172a` (Dark slate)
-- Secondary: `#475569` (Medium gray)
-- Muted: `#94a3b8` (Light gray)
+- Primary: `#1A1040` (Deep violet-black)
+- Secondary: `#5B4D8A` (Muted violet)
+- Muted: `#8B7BAE` (Soft violet-gray)
+- Placeholder: `#A090C0` (Light violet-gray)
 
 **Border & Backgrounds:**
-- Light borders: `#e2e8f0`
-- Default borders: `#cbd5e1`
-- Subtle background: `#f8fafc`
+- Light borders: `#D4C8F0`
+- Default borders: `#B8A8E0`
+- Subtle background: `#F8F5FF`
+- Surface background: `#FFFFFF`
+- Tinted background: `#EDE8FA`
 
 ### 3. **Spacing Standardization (8px Grid)**
 New utility classes:
@@ -42,14 +48,14 @@ New utility classes:
 Three button variants with comprehensive states:
 
 **Primary Button (.btn-premium-primary)**
-- Base: Linear gradient `#1e2bd6` → `#1a24b8`
-- Shadow: `rgba(30, 43, 214, 0.25)`
-- Hover: Darkened gradient + enhanced shadow + translateY(-2px)
+- Base: `#7C5CBF` solid background
+- Shadow: `rgba(124, 92, 191, 0.25)`
+- Hover: `#5A3A9E` + enhanced shadow + translateY(-2px)
 - Active: Scale down (0.95) for tactile feedback
 - Disabled: 50% opacity
 
 **Secondary Button (.btn-premium-secondary)**
-- Base: `rgba(30, 43, 214, 0.08)` background with subtle border
+- Base: `rgba(139, 92, 246, 0.12)` background with subtle border
 - Hover: Increased opacity + border highlight
 - Active: Scale down slightly
 
@@ -170,13 +176,22 @@ Timing: All use `cubic-bezier(0.4, 0, 0.2, 1)` for natural feel
 - Use EmptyState/ErrorState components for consistency
 - Prefer CSS animations over JS for performance
 
-### Colors to Use
+### Colors to Use (White / Light Mode)
 ```
-Primary: #1e2bd6
-Dark: #1a24b8
-Light: #f0f4ff
-Text Primary: #0f172a
-Text Secondary: #475569
+Primary:      #7C5CBF   (Violet – buttons, active states)
+Hover:        #5A3A9E   (Deep violet – hover states)
+Secondary:    #9B7FD4   (Soft violet – secondary elements)
+Accent:       #8B5CF6   (Bright violet – badges, highlights)
+Accent Dark:  #6D28D9   (Vivid violet – accent text)
+Tint:         #EDE8FA   (Light violet – tinted surfaces)
+Background:   #F8F5FF   (Off-white violet – page backgrounds)
+Surface:      #FFFFFF   (White – cards, modals)
+Border:       #D4C8F0   (Soft lavender)
+Border Dark:  #B8A8E0   (Muted lavender)
+Text Primary: #1A1040   (Deep violet-black)
+Text Secondary:#5B4D8A  (Muted violet)
+Text Muted:   #8B7BAE   (Soft violet-gray)
+Text Placeholder:#A090C0 (Light violet-gray)
 ```
 
 ### Spacing

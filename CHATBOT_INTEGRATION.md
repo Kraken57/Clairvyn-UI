@@ -21,8 +21,8 @@ Guide for integrating the new premium design system components into the chatbot 
     <div className="chat-bubble-assistant text-gray-700 dark:text-gray-300 p-3 sm:p-4 rounded-2xl shadow-md">
       <div className="flex items-center gap-3 min-w-0">
         <div className="relative flex-shrink-0">
-          <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-[#1e2bd6]/20" />
-          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#1e2bd6] border-r-[#1e2bd6] animate-spin" />
+          <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-[#7C5CBF]/20" />
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#7C5CBF] border-r-[#7C5CBF] animate-spin" />
         </div>
         <motion.span
           key={isTurnInFlight ? assistantStatusLine : "clairvyn-thinking"}
@@ -331,19 +331,19 @@ Both have:
 
 ## 11. Color Adjustments for Chatbot
 
-### Primary Color Usage
+### Primary Color Usage (Light Mode)
 ```tsx
 // Spinners
-className="text-[#1e2bd6]"
+className="text-[#7C5CBF]"
 
 // Buttons
-className="bg-[#1e2bd6] hover:bg-[#1a24b8]"
+className="bg-[#7C5CBF] hover:bg-[#5A3A9E]"
 
 // Borders
-className="border-[#1e2bd6]/40"
+className="border-[#7C5CBF]/40"
 
 // Text links
-className="text-[#1e2bd6] hover:text-[#1a24b8]"
+className="text-[#7C5CBF] hover:text-[#5A3A9E]"
 ```
 
 ### Dark Mode (Chatbot Only)
@@ -387,7 +387,7 @@ className="transition-none"
 ### Focus States
 ```tsx
 // Automatically applied via globals.css
-// 2px outline in #1e2bd6
+// 2px outline in #7C5CBF
 // 2px offset for visibility
 
 <button>
@@ -457,7 +457,7 @@ const Suspense loading={<ChatHistorySkeleton />}
 - [ ] Animations smooth on mobile (60fps)
 - [ ] Focus states visible on keyboard nav
 - [ ] Dark mode only works on chatbot page
-- [ ] Colors match design system (#1e2bd6)
+- [ ] Colors match design system (#7C5CBF)
 - [ ] Spacing follows 8px grid
 - [ ] Form validation shows error/success states
 

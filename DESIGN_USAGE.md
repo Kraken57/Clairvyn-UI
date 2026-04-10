@@ -4,18 +4,27 @@
 
 ### Colors
 ```tsx
-// Primary brand color
-const PRIMARY = "#1e2bd6"
-const PRIMARY_DARK = "#1a24b8"
-const PRIMARY_LIGHT = "#f0f4ff"
+// Primary brand color (White / Light Mode)
+const PRIMARY = "#7C5CBF"
+const PRIMARY_HOVER = "#5A3A9E"
+const PRIMARY_SECONDARY = "#9B7FD4"
+const PRIMARY_TINT = "#EDE8FA"
+const PRIMARY_BG = "#F8F5FF"
+const ACCENT = "#8B5CF6"
+const ACCENT_DARK = "#6D28D9"
 
 // Text colors
-const TEXT_PRIMARY = "#0f172a"
-const TEXT_SECONDARY = "#475569"
-const TEXT_MUTED = "#94a3b8"
+const TEXT_PRIMARY = "#1A1040"
+const TEXT_SECONDARY = "#5B4D8A"
+const TEXT_MUTED = "#8B7BAE"
+const TEXT_PLACEHOLDER = "#A090C0"
+
+// Borders
+const BORDER_LIGHT = "#D4C8F0"
+const BORDER_DEFAULT = "#B8A8E0"
 
 // Use in Tailwind
-className="bg-[#1e2bd6] hover:bg-[#1a24b8] text-[#0f172a]"
+className="bg-[#7C5CBF] hover:bg-[#5A3A9E] text-[#1A1040]"
 ```
 
 ---
@@ -286,7 +295,7 @@ className="gap-lg"    // 24px gap
   <input 
     type="email"
     className={`px-4 py-3 rounded-lg border-2 transition-all ${
-      error ? "error" : success ? "success" : "border-[#cbd5e1]"
+      error ? "error" : success ? "success" : "border-[#D4C8F0]"
     }`}
     value={value}
     onChange={handleChange}
@@ -318,9 +327,9 @@ className="gap-lg"    // 24px gap
 If needed, access color variables:
 ```css
 .my-element {
-  color: var(--primary-color);        /* #1e2bd6 */
-  background: var(--bg-subtle);       /* #f8fafc */
-  border-color: var(--border-light);  /* #e2e8f0 */
+  color: var(--clv-ink-primary);        /* #1A1040 */
+  background: var(--clv-bg-tint);       /* #F8F5FF */
+  border-color: var(--clv-border-light); /* #D4C8F0 */
 }
 ```
 
@@ -329,7 +338,7 @@ If needed, access color variables:
 ## Migration Checklist
 
 - [ ] Replace all custom buttons with `.btn-premium-*`
-- [ ] Update color values to primary `#1e2bd6`
+- [ ] Update color values to primary `#7C5CBF`
 - [ ] Use 8px spacing consistently
 - [ ] Add skeleton loaders to async content
 - [ ] Add empty states where applicable
@@ -356,7 +365,7 @@ If needed, access color variables:
 **Colors look different?**
 - Clear browser cache
 - Check CSS load order in globals.css
-- Verify `#1e2bd6` is used, not variables
+- Verify `#7C5CBF` is used, not old blue values
 
 **Animations too fast/slow?**
 - Adjust transition duration in inline styles

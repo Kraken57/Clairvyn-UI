@@ -13,10 +13,11 @@ Comprehensive redesign of Clairvyn's frontend to create a premium, human-crafted
 - ✅ Only chatbot route allows dark mode toggling
 
 ### 2. **Color Consolidation** ✓
-- ✅ Primary color: `#1e2bd6` (Indigo)
-- ✅ Dark variant: `#1a24b8` (for hover states)
-- ✅ Light variant: `#f0f4ff` (for backgrounds)
-- ✅ Removed all variations (`#4f46e5`, `#6366f1`, `indigo-600`)
+- ✅ Primary color: `#7C5CBF` (Violet)
+- ✅ Hover variant: `#5A3A9E` (for hover states)
+- ✅ Light variant: `#F8F5FF` (for backgrounds)
+- ✅ Tint variant: `#EDE8FA` (for tinted surfaces)
+- ✅ Removed all variations (`#4f46e5`, `#6366f1`, `#1e2bd6`, `indigo-600`)
 - ✅ Applied to: pricing page, about page, homepage buttons, all components
 
 ### 3. **Spacing Standardization** ✓
@@ -145,7 +146,7 @@ Comprehensive redesign of Clairvyn's frontend to create a premium, human-crafted
 - Breathable layouts
 
 ### 4. **Color Hierarchy**
-- One primary brand color (`#1e2bd6`)
+- One primary brand color (`#7C5CBF`)
 - Clear text hierarchy (primary, secondary, muted)
 - Accessible contrast ratios
 
@@ -206,22 +207,26 @@ import { ErrorState } from "@/components/ErrorState"
 
 ---
 
-## 📊 Color Reference
+## 📊 Color Reference (White / Light Mode)
 
 ```
-Primary:         #1e2bd6
-Primary Dark:    #1a24b8
-Primary Light:   #f0f4ff
+Primary:         #7C5CBF
+Primary Hover:   #5A3A9E
+Primary Light:   #F8F5FF
+Primary Tint:    #EDE8FA
+Secondary:       #9B7FD4
+Accent:          #8B5CF6
+Accent Dark:     #6D28D9
 
-Text Primary:    #0f172a
-Text Secondary:  #475569
-Text Muted:      #94a3b8
+Text Primary:    #1A1040
+Text Secondary:  #5B4D8A
+Text Muted:      #8B7BAE
 
-Border Light:    #e2e8f0
-Border Default:  #cbd5e1
+Border Light:    #D4C8F0
+Border Default:  #B8A8E0
 
-BG Subtle:       #f8fafc
-BG Light:        #f1f5f9
+BG Subtle:       #F8F5FF
+BG Surface:      #FFFFFF
 
 Error:           #dc2626
 Success:         #10b981
@@ -304,7 +309,7 @@ See documentation files:
 
 All requirements implemented:
 - ✅ Dark mode removed (except chatbot)
-- ✅ Colors consolidated to #1e2bd6
+- ✅ Colors consolidated to #7C5CBF
 - ✅ Spacing standardized on 8px grid
 - ✅ Loading states added
 - ✅ Empty states created

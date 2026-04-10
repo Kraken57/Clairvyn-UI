@@ -90,7 +90,7 @@ REDIRECT_LOGIC_ANALYSIS.md            (NEW - Comprehensive analysis)
 - **Duration**: 1.2 seconds per cycle
 - **Easing**: Smooth cubic-bezier
 - **Size**: Responsive (w-8 h-8)
-- **Color**: Blue (#1e2bd6)
+- **Color**: Violet (#7C5CBF)
 
 ### Benefits of House Icon:
 ✅ Consistent with brand identity

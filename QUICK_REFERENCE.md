@@ -1,20 +1,28 @@
 # Clairvyn Design System - Quick Reference Card
 
-## 🎨 Colors
+## 🎨 Colors (White / Light Mode)
 ```
-Primary:    #1e2bd6  (Use for buttons, links, accents)
-Dark:       #1a24b8  (Hover states)
-Light:      #f0f4ff  (Backgrounds)
+Primary:    #7C5CBF  (Use for buttons, links, accents)
+Hover:      #5A3A9E  (Hover states)
+Secondary:  #9B7FD4  (Secondary elements)
+Tint:       #EDE8FA  (Tinted surfaces)
+Background: #F8F5FF  (Subtle backgrounds)
+Surface:    #FFFFFF  (Cards, modals)
 
-Text:       #0f172a  (Headings, primary text)
-Secondary:  #475569  (Body text)
-Muted:      #94a3b8  (Descriptions, hints)
+Text:       #1A1040  (Headings, primary text)
+Secondary:  #5B4D8A  (Body text)
+Muted:      #8B7BAE  (Descriptions, hints)
+Placeholder:#A090C0  (Input placeholders)
 
-Border:     #cbd5e1  (Default)
-BG Light:   #f8fafc  (Subtle backgrounds)
+Border:     #D4C8F0  (Soft lavender)
+Border Dk:  #B8A8E0  (Muted lavender)
 
-Error:      #dc2626  (Red alerts)
-Success:    #10b981  (Green confirmations)
+Accent:     #8B5CF6  (Bright violet badges)
+Accent Dk:  #6D28D9  (Vivid violet text)
+
+Error:      #DC2626  (Red alerts)
+Success:    #22A06B  (Green confirmations)
+Warning:    #D97706  (Amber warnings)
 ```
 
 ## 🔘 Buttons
@@ -125,16 +133,16 @@ Usage: className="animate-fade-in"
 ## 📦 Cards
 ```tsx
 <div className="card-premium">
-  <h3 className="font-semibold text-[#0f172a]">Title</h3>
-  <p className="text-[#475569] mt-2">Content</p>
+  <h3 className="font-semibold text-[#1A1040]">Title</h3>
+  <p className="text-[#5B4D8A] mt-2">Content</p>
 </div>
 ```
 
 ## 🔤 Typography
 ```
-Primary:   className="text-[#0f172a]"
-Secondary: className="text-[#475569]"
-Muted:     className="text-[#94a3b8]"
+Primary:   className="text-[#1A1040]"
+Secondary: className="text-[#5B4D8A]"
+Muted:     className="text-[#8B7BAE]"
 Gradient:  className="text-gradient-primary"
 ```
 
@@ -157,7 +165,7 @@ Gradient:  className="text-gradient-primary"
 - `REDESIGN_SUMMARY.md` - Overview
 
 ## ✅ Checklist
-- [ ] Using #1e2bd6 for primary color
+- [ ] Using #7C5CBF for primary color
 - [ ] Spacing on 8px grid
 - [ ] Buttons have disabled states
 - [ ] Using skeleton components

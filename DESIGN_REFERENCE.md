@@ -106,21 +106,28 @@
 ### Light Mode
 ```
 Backgrounds:
-- Primary: #FFFFFF (white)
-- Secondary: #F3F4F6 (gray-100)
-- Hover: #F9FAFB (gray-50)
+- Surface: #FFFFFF (white)
+- Tint: #F8F5FF (soft violet)
+- Hover: #EDE8FA (light violet)
 
 Text:
-- Primary: #111827 (gray-900)
-- Secondary: #6B7280 (gray-500)
-- Disabled: #D1D5DB (gray-300)
+- Primary: #1A1040 (deep violet-black)
+- Secondary: #5B4D8A (muted violet)
+- Muted: #8B7BAE (soft violet-gray)
+- Placeholder: #A090C0 (light violet-gray)
 
 Accents:
-- Primary Action: #0D9488 (teal-600)
-- Hover: #0F766E (teal-700)
-- Success: #10B981 (green-600)
-- Error: #EF4444 (red-600)
-- Warning: #F59E0B (amber-500)
+- Primary Action: #7C5CBF (violet)
+- Hover: #5A3A9E (deep violet)
+- Accent: #8B5CF6 (bright violet)
+- Accent Dark: #6D28D9 (vivid violet)
+- Success: #22A06B (green)
+- Error: #DC2626 (red)
+- Warning: #D97706 (amber)
+
+Borders:
+- Light: #D4C8F0 (soft lavender)
+- Default: #B8A8E0 (muted lavender)
 ```
 
 ### Dark Mode
@@ -454,13 +461,13 @@ Space: Activate button
 ### Focus States
 ```
 All interactive elements have visible focus ring:
-focus:ring-2 focus:ring-teal-500 focus:ring-offset-2
+focus:ring-2 focus:ring-[#7C5CBF] focus:ring-offset-2
 ```
 
 ### Color Contrast
 ```
-Text on white: #111827 (4.5:1 ratio)
-Text on teal: White/light (7:1+ ratio)
+Text on white: #1A1040 (4.5:1 ratio)
+Text on violet: White/light (7:1+ ratio)
 Disabled text: #D1D5DB on white (2:1 ratio - acceptable for disabled)
 ```
 
@@ -518,13 +525,18 @@ xl: 1280px  - Desktops
 
 ## 🎯 Brand Consistency
 
-### Clairvyn Brand Colors
+### Clairvyn Brand Colors (White / Light Mode)
 ```
-Primary: #1E2BD6 (Deep Blue - for hero, links)
-Secondary: #0D9488 (Teal - for interactive)
-Accent: #10B981 (Green - for success)
-Dark: #0B1A3C (Navy - for text)
-Light: #F6F4FF (Lavender - for backgrounds)
+Primary:   #7C5CBF (Violet – for hero, links, buttons)
+Hover:     #5A3A9E (Deep Violet – for interactive hover)
+Secondary: #9B7FD4 (Soft Violet – for secondary elements)
+Accent:    #8B5CF6 (Bright Violet – for badges, highlights)
+Dark Text: #1A1040 (Deep Violet-Black – for headings)
+Light:     #F8F5FF (Soft Violet – for backgrounds)
+Tint:      #EDE8FA (Lavender – for tinted surfaces)
+Success:   #22A06B (Green – for success)
+Error:     #DC2626 (Red – for error)
+Warning:   #D97706 (Amber – for warning)
 ```
 
 ### Font Family

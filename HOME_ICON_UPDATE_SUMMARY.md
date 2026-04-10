@@ -44,12 +44,12 @@ const sidebarItems = [
 ### Chatbot Home Button Icon
 - ✅ Now uses: **Home icon** (house symbol)
 - Location: Sidebar navigation item
-- Color: Blue (#1e2bd6)
+- Color: Violet (#7C5CBF)
 
 ### Signup Page Home Button Icon
 - ✅ Already uses: **Home icon** (house symbol)
 - Location: Top-left corner (back to landing button)
-- Color: Blue (#1e2bd6)
+- Color: Violet (#7C5CBF)
 - File: `app/signup/page.tsx` (line 130)
 
 ---
