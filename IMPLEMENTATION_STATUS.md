@@ -1,54 +1,32 @@
 # Dark Mode Implementation Status
 
-## ✅ Completed
+## Current Palette
 
-1. **Color Palette Updated**
-   - Background: `#1a1a1a` → `#111111` (ChatGPT-inspired)
-   - User Messages: `#1e88e5` (Google Material Blue)
-   - Assistant Messages: `#2a2a2a` (Dark Gray)
-   - Text: `#e8e8e8` (High contrast)
+Dark mode tokens defined in `app/globals.css` → `.dark` selector.  
+Scoped to `/chatbot` route only.
 
-2. **Files Modified**
-   - `app/globals.css` - Dark mode CSS (lines 820-930)
-   - `components/TypingIndicator.tsx` - New animated dots loader
+| Category | Tokens |
+|----------|--------|
+| Backgrounds | `#1A1916` shell / `#1F1D1A` chat / `#242320` surface / `#2C2A27` input |
+| Accent | `#9B7FD4` primary / `#7C5CBF` deep / `#C4B0F0` lavender |
+| Text | `#F0EBE0` primary / `#A8A090` secondary / `#6B6458` muted |
+| Borders | `rgba(255,255,255, 0.07/0.11/0.18)` glassmorphism |
+| Scrollbars | `rgba(155,127,212, 0.25/0.45)` violet-tinted |
 
-3. **Input Field Fixed**
-   - Background now dark (transparent inheriting parent)
-   - Text color: `#e8e8e8`
-   - Placeholder: `#999999`
+## Files
 
-4. **Loading Icon Updated**
-   - Animated dots instead of house SVG
-   - "Processing..." text indicator
-   - Dark/light mode aware
+- `app/globals.css` — All dark mode CSS (`.dark` selector + `--dk-*` tokens)
+- `contexts/ThemeContext.tsx` — Dark mode toggle logic
+- `lib/documentTheme.ts` — Dark mode initialization
+- `components/TypingIndicator.tsx` — Animated loading dots (dark/light aware)
 
-5. **Mobile Optimization**
-   - Touch-friendly button sizing (44px minimum)
-   - Responsive font sizes
-   - Proper padding on bubbles
-   - Works on all screen sizes
+## Testing
 
-## 📍 What to Test
-
-1. **Textbox** - Should be dark (not white) in dark mode
-2. **Loading Animation** - Should show animated dots + "Processing..."
-3. **Mobile** - Test on phones/tablets (< 768px width)
-4. **Colors** - Verify they match modern design standards
-5. **Contrast** - Check text is readable on all backgrounds
-
-## 🚀 Next Steps
-
-Run the chatbot and verify:
 ```
 npm run dev
-# Go to http://localhost:3000/chatbot
+# Navigate to /chatbot
 # Toggle dark mode in settings
-# Send a message to see loading animation
+# Verify warm backgrounds + violet accents
 ```
 
-## 📝 Files Changed
-
-- `app/globals.css` - CSS updates
-- `components/TypingIndicator.tsx` - Component rewrite
-
-**Status:** Ready for testing ✅
+See `DARK_MODE_COLOR_PALETTE.md` for the full token reference.

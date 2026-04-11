@@ -1,194 +1,83 @@
-# Dark Mode Quick Reference Card
+# Dark Mode — Quick Reference Card
 
-## 🎨 New Color Palette
+## Color Palette
 
 ```
-BACKGROUNDS
-├─ Primary:    #0d0d0d (Very dark)
-├─ Secondary:  #111111 (Dark)
-└─ Surfaces:   #1f1f1f (Medium dark)
+BACKGROUNDS (warm near-black)
+├─ Shell:      #1A1916  (--dk-bg-shell)
+├─ Chat:       #1F1D1A  (--dk-bg-chat)
+├─ Surface:    #242320  (--dk-bg-surface)
+├─ Input:      #2C2A27  (--dk-bg-input)
+├─ Hover:      #2A2825  (--dk-bg-hover)
+└─ Active:     #2F2C28  (--dk-bg-active)
 
-TEXT
-├─ Primary:    #ffffff (White)
-├─ Secondary:  #e5e5e5 (Light gray)
-└─ Muted:      #b0b0b0 (Gray)
+ACCENT (violet)
+├─ Primary:    #9B7FD4  (--dk-accent)
+├─ Deep:       #7C5CBF  (--dk-accent-deep)
+├─ Muted:      rgba(155,127,212, 0.12)
+├─ Border:     rgba(155,127,212, 0.25)
+└─ Lavender:   #C4B0F0  (--dk-lavender)
 
-MESSAGES
-├─ User:       #1a73e8 (Google Blue)
-└─ Assistant:  #1f1f1f (Dark gray)
+TEXT (warm cream)
+├─ Primary:    #F0EBE0  (--dk-text-primary)
+├─ Secondary:  #A8A090  (--dk-text-secondary)
+├─ Muted:      #6B6458  (--dk-text-muted)
+└─ Placeholder:#5A5248  (--dk-text-placeholder)
 
-INTERACTIVE
-├─ Borders:    #333333 (Medium gray)
-├─ Scrollbars: #444444 (Gray)
-└─ Hover:      rgba(255,255,255,0.05)
+BORDERS (glassmorphism)
+├─ Subtle:     rgba(255,255,255, 0.07)
+├─ Mid:        rgba(255,255,255, 0.11)
+├─ Strong:     rgba(255,255,255, 0.18)
+└─ Solid:      #3F3A33
+
+SCROLLBARS (violet-tinted)
+├─ Thumb:      rgba(155,127,212, 0.25)
+└─ Hover:      rgba(155,127,212, 0.45)
 ```
 
-## 📋 CSS Classes
+## Copy-Paste CSS
 
 ```css
-/* Main elements */
-.dark .chat-background      /* Main chat area */
-.dark .chat-bubble-user     /* User messages */
-.dark .chat-bubble-assistant /* Assistant messages */
-.dark .chat-input           /* Input area */
-
-/* Scrollbars */
-.dark .scrollbar-main       /* Chat scrollbar */
-.dark .scrollbar-sidebar    /* Sidebar scrollbar */
-
-/* Text colors (auto-applied) */
-.dark h1, .dark h2, .dark h3 { color: #ffffff; }
-.dark p, .dark span          { color: #e5e5e5; }
-```
-
-## 🚀 Quick Start (Adding New Element)
-
-```css
-/* In app/globals.css */
-.dark .your-element {
-  background-color: #1f1f1f;    /* Surface color */
-  color: #e5e5e5;               /* Text color */
-  border: 1px solid #333333;    /* Border color */
+.dark .new-element {
+  background-color: var(--dk-bg-surface);
+  color: var(--dk-text-primary);
+  border: 1px solid var(--dk-border-mid);
 }
-
-.dark .your-element:hover {
-  background-color: #262626;    /* Slightly lighter */
+.dark .new-element:hover {
+  background-color: var(--dk-bg-hover);
 }
 ```
 
-## 🎯 Key Colors (Copy-Paste Ready)
+## Shadcn HSL Overrides
 
 ```
-User Messages (Blue):
-  Background: #1a73e8
-  Text: #ffffff
-  Border: rgba(106, 168, 237, 0.3)
-
-Assistant Messages (Gray):
-  Background: #1f1f1f
-  Text: #e5e5e5
-  Border: #333333
-
-Input Area:
-  Background: #1f1f1f
-  Text: #e5e5e5
-  Placeholder: #666666
-  Border: #333333
-
-Main Background:
-  Color: linear-gradient(180deg, #0d0d0d 0%, #111111 100%)
+--background: 30 7% 12%    --foreground: 35 28% 89%
+--card: 30 8% 19%           --primary: 35 28% 89%
+--muted: 33 9% 16%          --border: 35 10% 22%
+--input: 25 9% 13%          --ring: 35 10% 35%
 ```
 
-## ✅ Testing Checklist
-
-Before committing dark mode changes:
-- [ ] Text is readable (high contrast)
-- [ ] All buttons are visible
-- [ ] Hover states work
-- [ ] Messages display correctly
-- [ ] Scrollbars are subtle
-- [ ] No text color conflicts
-- [ ] Input field is clear
-- [ ] Sidebar looks good
-
-## ⚙️ File Locations
+## File Locations
 
 | File | Purpose |
 |------|---------|
-| `app/globals.css` | All dark mode CSS (lines 720-890) |
+| `app/globals.css` | All dark mode CSS (`.dark` selector) |
 | `contexts/ThemeContext.tsx` | Dark mode toggle logic |
 | `lib/documentTheme.ts` | Dark mode initialization |
-
-## 📚 Documentation Files
-
-| File | Purpose |
-|------|---------|
-| `DARK_MODE_REDESIGN.md` | Complete design guide |
-| `DARK_MODE_COLOR_PALETTE.md` | Color codes & values |
-| `DARK_MODE_VISUAL_SUMMARY.md` | Before/after visuals |
-| `DARK_MODE_IMPLEMENTATION_GUIDE.md` | Developer guide |
-
-## 🔧 Common Tasks
-
-### Add button to dark mode
-```css
-.dark .btn-primary {
-  background-color: #1a73e8;
-  color: #ffffff;
-}
-.dark .btn-primary:hover {
-  background-color: #1557b0;
-}
-```
-
-### Add text styling
-```css
-.dark .text-label {
-  color: #b0b0b0;
-  font-size: 12px;
-}
-```
-
-### Add border styling
-```css
-.dark .card {
-  border: 1px solid #333333;
-  background-color: #1f1f1f;
-}
-```
-
-## 🎓 Principles
-
-1. **Use approved colors** - Don't invent new ones
-2. **High contrast** - Text on background must be ≥4.5:1
-3. **Subtle shadows** - Keep shadows minimal
-4. **No blur** - Avoid backdrop-filter
-5. **Simple gradients** - At most 1 gradient per element
-6. **Professional feel** - Modern, elegant design
-
-## ⚡ Performance Tips
-
-✓ Use solid colors when possible
-✓ Minimal shadows (0 2px 8px max)
-✓ One gradient per element max
-✓ No complex filters
-✓ Test on mobile devices
-✓ Monitor scroll performance
-
-## 🔍 Contrast Checker
-
-Use: https://webaim.org/resources/contrastchecker/
-
-Target ratios:
-- Text: 4.5:1 (AA) or 7:1 (AAA)
-- Large text: 3:1 (AA) or 4.5:1 (AAA)
-
-Current compliance:
-- #ffffff on #0d0d0d = 19.4:1 ✅ AAA
-- #ffffff on #1f1f1f = 17.2:1 ✅ AAA
-- #e5e5e5 on #1f1f1f = 14.8:1 ✅ AAA
-
-## 🐛 Troubleshooting
-
-**Problem:** Styles not applying in dark mode
-**Fix:** 
-1. Check you're on `/chatbot` route
-2. Verify element has `.dark` prefix in CSS
-3. Check browser dark mode is enabled
-4. Clear cache and reload
+| `DARK_MODE_COLOR_PALETTE.md` | Full token reference |
 
 **Problem:** Text is hard to read
 **Fix:**
-1. Use #ffffff for white text
-2. Use #e5e5e5 for body text
+1. Use `var(--dk-text-primary)` (#F0EBE0) for main text
+2. Use `var(--dk-text-secondary)` (#A8A090) for labels
 3. Check contrast ratio (min 4.5:1)
 
 **Problem:** Element looks bad in dark mode
 **Fix:**
 1. Add `.dark .element { ... }` CSS rule
-2. Use approved colors from palette
+2. Use approved `--dk-*` tokens from palette
 3. Test in actual dark mode
-4. Check with inspector (compute styles)
+4. Check with inspector (computed styles)
 
 ## 📊 Stats
 

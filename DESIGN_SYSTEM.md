@@ -12,7 +12,7 @@ This document outlines the comprehensive design system upgrades made to create a
 
 ### 2. **Color Consolidation**
 **Primary Brand Color:** `#7C5CBF` (Violet)
-- Replaced all variations (`#4f46e5`, `#6366f1`, `indigo-600`, `#1e2bd6`, etc.) with violet palette
+- Unified to violet palette across all pages
 - Applied to all buttons, links, and accent elements
 - Hover variant: `#5A3A9E`
 - Secondary: `#9B7FD4`

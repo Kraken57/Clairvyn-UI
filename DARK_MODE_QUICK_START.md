@@ -1,102 +1,63 @@
-# Dark Mode Redesign - Quick Start Guide (5 Minutes)
+# Dark Mode — Quick Start
 
-## 🚀 Try It Right Now!
+## Enable Dark Mode
+1. Navigate to `/chatbot`
+2. Click the settings icon (gear) in the sidebar
+3. Toggle "Dark mode" ON
+4. Preference auto-saved to localStorage
 
-### Step 1: Enable Dark Mode
-```
-1. Go to your chatbot: http://localhost:3000/chatbot
-2. Click the settings icon (⚙️) in the sidebar
-3. Toggle "Dark mode" switch ON
-4. See the beautiful new dark theme!
-```
+## Current Palette (from `app/globals.css` → `.dark`)
 
-### Step 2: Admire the Changes
+### Backgrounds (warm near-black)
 ```
-✅ Background: Clean dark gradient (no more colorful)
-✅ User Messages: Professional Google Blue (#1a73e8)
-✅ Assistant Messages: Elegant Dark Gray (#1f1f1f)
-✅ Input Area: Simple and clean
-✅ Overall: Matches modern design style!
-```
-
-### Step 3: Toggle Back
-```
-Click the toggle OFF to see light mode
-Click ON to see dark mode again
-Your preference is saved automatically!
+--dk-bg-shell:   #1A1916    page shell
+--dk-bg-chat:    #1F1D1A    chat area
+--dk-bg-surface: #242320    cards / bubbles
+--dk-bg-input:   #2C2A27    input fields
+--dk-bg-hover:   #2A2825    hover state
+--dk-bg-active:  #2F2C28    active state
 ```
 
----
+### Accent (violet)
+```
+--dk-accent:        #9B7FD4                   primary
+--dk-accent-deep:   #7C5CBF                   user bubbles
+--dk-accent-muted:  rgba(155,127,212, 0.12)   tinted bg
+--dk-accent-border: rgba(155,127,212, 0.25)   accent borders
+--dk-lavender:      #C4B0F0                   highlights
+```
 
-## 📚 Documentation in 3 Minutes
+### Text (warm cream)
+```
+--dk-text-primary:     #F0EBE0   headings, body
+--dk-text-secondary:   #A8A090   labels
+--dk-text-muted:       #6B6458   disabled
+--dk-text-placeholder: #5A5248   placeholders
+```
 
-### For Quick Overview
-**Read:** `DARK_MODE_FINAL_SUMMARY.md` (5 min)
-- What changed
-- Why it's better
-- Key metrics
-- What you get
+### Borders / Scrollbars
+```
+--dk-border:        rgba(255,255,255, 0.07)
+--dk-border-mid:    rgba(255,255,255, 0.11)
+--dk-border-strong: rgba(255,255,255, 0.18)
+--dk-scroll-thumb:  rgba(155,127,212, 0.25)
+--dk-scroll-hover:  rgba(155,127,212, 0.45)
+```
 
-### For Color Codes
-**Read:** `DARK_MODE_QUICK_REFERENCE.md` (3 min)
-- All color codes
-- CSS classes
-- Copy-paste ready
+## For Developers — Adding a New Element
 
-### For Before/After
-**Read:** `DARK_MODE_VISUAL_EXAMPLES.md` (5 min)
-- Side-by-side comparison
-- Visual examples
-- Feature comparison table
-
----
-
-## 💻 For Developers (5 Minutes)
-
-### Quick Setup
-1. Open `app/globals.css`
-2. Go to lines 720-890
-3. See the new dark mode CSS
-4. All styles are well-commented
-
-### To Add New Element
 ```css
-.dark .your-new-element {
-  background-color: #1f1f1f;      /* Dark surface */
-  color: #e5e5e5;                  /* Light text */
-  border: 1px solid #333333;      /* Dark border */
+.dark .your-element {
+  background-color: var(--dk-bg-surface);
+  color: var(--dk-text-primary);
+  border: 1px solid var(--dk-border-mid);
 }
-
-.dark .your-new-element:hover {
-  background-color: #262626;      /* Slightly lighter */
+.dark .your-element:hover {
+  background-color: var(--dk-bg-hover);
 }
 ```
 
-### Colors to Use
-```
-Backgrounds:  #0d0d0d, #111111, #1f1f1f
-User Messages:  #1a73e8 (Google Blue)
-Text:           #ffffff, #e5e5e5, #b0b0b0
-Borders:        #333333, #2a2a2a
-```
-
-See `DARK_MODE_COLOR_PALETTE.md` for complete list.
-
----
-
-## 📊 Key Facts (At a Glance)
-
-### Performance
-- ⚡ **75% faster** rendering
-- 📉 **50% less** CSS code
-- 🎯 **60fps** sustained scrolling
-- 🔋 Better battery on OLED
-
-### Accessibility  
-- ♿ **WCAG AAA** compliant
-- 👁️ **19.4:1** contrast ratio
-- 🎨 Color blind friendly
-- 📱 Mobile optimized
+See `DARK_MODE_COLOR_PALETTE.md` for the full token reference.
 
 ### Design
 - ✨ Matches **ChatGPT** style

@@ -191,11 +191,11 @@
 ## ✅ Feature Checklist
 
 ### Color Palette
-- [x] Primary background defined (#0d0d0d)
-- [x] Secondary background defined (#111111)
-- [x] Surface color defined (#1f1f1f)
-- [x] User message color defined (#1a73e8)
-- [x] Assistant message color defined (#1f1f1f)
+- [x] Shell background defined (#1A1916 → --dk-bg-shell)
+- [x] Chat background defined (#1F1D1A → --dk-bg-chat)
+- [x] Surface color defined (#242320 → --dk-bg-surface)
+- [x] User message color defined (#7C5CBF → --dk-accent-deep)
+- [x] Assistant message color defined (#242320 → --dk-bg-surface)
 - [x] Text colors defined (white, light gray, gray, muted)
 - [x] Border colors defined
 - [x] Scrollbar colors defined

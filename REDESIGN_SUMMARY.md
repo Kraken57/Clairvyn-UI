@@ -17,7 +17,7 @@ Comprehensive redesign of Clairvyn's frontend to create a premium, human-crafted
 - ✅ Hover variant: `#5A3A9E` (for hover states)
 - ✅ Light variant: `#F8F5FF` (for backgrounds)
 - ✅ Tint variant: `#EDE8FA` (for tinted surfaces)
-- ✅ Removed all variations (`#4f46e5`, `#6366f1`, `#1e2bd6`, `indigo-600`)
+- ✅ Unified to violet palette across all pages
 - ✅ Applied to: pricing page, about page, homepage buttons, all components
 
 ### 3. **Spacing Standardization** ✓

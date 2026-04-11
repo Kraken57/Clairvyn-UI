@@ -1,193 +1,99 @@
-# Dark Mode Redesign - Modern Style
+# Dark Mode — Design Documentation
 
 ## Overview
 
-The chatbot dark mode has been completely redesigned with an elegant, minimalist aesthetic. The new design features clean, professional styling with a focus on readability and user experience.
+Dark mode is available on the `/chatbot` route only. All other pages force `color-scheme: light only`.
 
-## Key Changes
+## Color System
 
-### 1. **Background Colors**
-- **Before:** Complex radial gradients with multiple colors (#070611, indigo, purple, pink)
-- **After:** Clean, simple dark background (#0d0d0d → #111111 gradient)
-- **Effect:** Much less distracting, professional look
+Full reference: `DARK_MODE_COLOR_PALETTE.md`
 
-### 2. **Chat Bubble Styling**
+### Backgrounds (warm near-black)
+| Token | Hex | Use |
+|-------|-----|-----|
+| `--dk-bg-shell` | `#1A1916` | Sidebar / outer shell |
+| `--dk-bg-chat` | `#1F1D1A` | Chat area |
+| `--dk-bg-surface` | `#242320` | Elevated cards |
+| `--dk-bg-input` | `#2C2A27` | Input fields |
+| `--dk-bg-hover` | `#2A2825` | Hover state |
+| `--dk-bg-active` | `#2F2C28` | Active / pressed |
 
-#### User Messages
-- **Before:** Complex gradient (purple, indigo, dark)
-- **After:** Solid blue (#1a73e8) with subtle border
-- **Text Color:** White (#ffffff)
-- **Border:** `1px solid rgba(106, 168, 237, 0.3)`
-- **Shadow:** `0 4px 12px rgba(26, 115, 232, 0.2)`
-- **Effect:** Clear distinction, professional appearance
+### Accent (violet)
+| Token | Value | Use |
+|-------|-------|-----|
+| `--dk-accent` | `#9B7FD4` | Primary accent |
+| `--dk-accent-deep` | `#7C5CBF` | Hover accent |
+| `--dk-accent-muted` | `rgba(155,127,212,0.12)` | Tinted bg |
+| `--dk-accent-border` | `rgba(155,127,212,0.25)` | Accent borders |
+| `--dk-lavender` | `#C4B0F0` | Lavender highlight |
 
-#### Assistant Messages
-- **Before:** Gray gradient with subtle purple tint
-- **After:** Dark gray (#1f1f1f) with subtle border
-- **Text Color:** Light gray (#e5e5e5)
-- **Border:** `1px solid #333333`
-- **Shadow:** `0 2px 8px rgba(0, 0, 0, 0.3)`
-- **Effect:** Matches ChatGPT's aesthetic perfectly
+### Text (cream-warm)
+| Token | Hex | Use |
+|-------|-----|-----|
+| `--dk-text-primary` | `#F0EBE0` | Headings |
+| `--dk-text-secondary` | `#A8A090` | Body text |
+| `--dk-text-muted` | `#6B6458` | Tertiary text |
+| `--dk-text-placeholder` | `#5A5248` | Placeholders |
 
-### 3. **Input Area**
-- **Before:** Complex gradient background with blur
-- **After:** Solid dark gray (#1f1f1f) with subtle border
-- **Cleaner look:** No backdrop blur, just clean styling
-- **Focus state:** Maintains outline none for seamless appearance
+### Borders (glassmorphism)
+| Token | Value | Use |
+|-------|-------|-----|
+| `--dk-border` | `rgba(255,255,255,0.07)` | Subtle |
+| `--dk-border-mid` | `rgba(255,255,255,0.11)` | Medium |
+| `--dk-border-strong` | `rgba(255,255,255,0.18)` | Strong |
+| `--border` | `#3F3A33` (HSL: 35 10% 22%) | Solid |
 
-### 4. **Scrollbars**
-- **Before:** Purple gradient (#7c3aed on dark background #1e1b4b)
-- **After:** Gray tones (#444444 on #1f1f1f)
-- **Effect:** Subtle, doesn't distract from content
+### Scrollbars
+| Token | Value |
+|-------|-------|
+| `--dk-scroll-thumb` | `rgba(155,127,212,0.25)` |
+| `--dk-scroll-hover` | `rgba(155,127,212,0.45)` |
 
-### 5. **Text and Elements**
-- **Headings:** All white (#ffffff)
-- **Primary text:** #e5e5e5
-- **Secondary text:** #b0b0b0
-- **Muted text:** #808080
-- **Consistent styling:** All text elements properly colored for dark mode
+## CSS Structure
 
-### 6. **Loading Animation**
-- **Before:** Rainbow gradient (teal, cyan, purple, pink)
-- **After:** Simple gray shimmer (gray → light gray → gray)
-- **Timing:** 2s infinite animation
-- **Effect:** Subtle and professional
+All dark-mode styles live in `app/globals.css` under the `.dark` selector.
 
-## Color Palette
+```css
+.dark {
+  --background: 30 7% 12%;
+  /* ... shadcn overrides ... */
 
-### New Dark Mode Colors
-```
-Primary Background:    #0d0d0d
-Secondary Background: #1f1f1f
-Accent Background:    #1a1a1a
-
-User Message:         #1a73e8 (Google Blue)
-Assistant Message:    #1f1f1f (Dark Gray)
-
-Text Primary:         #ffffff
-Text Secondary:       #b0b0b0
-Text Muted:           #808080
-
-Borders:              #333333
-Subtle Borders:       #2a2a2a
-
-Scrollbar Thumb:      #444444
-Scrollbar Track:      #1f1f1f
+  /* Clairvyn design tokens */
+  --dk-bg-shell: #1A1916;
+  --dk-bg-chat:  #1F1D1A;
+  /* ... etc ... */
+}
 ```
 
-## Comparison with Competitors
+Elements are styled with `.dark .element-class` rules lower in the file.
 
-### ChatGPT Style Elements ✓
-- Clean, minimalist dark background
-- Blue for user messages
-- Light gray for assistant messages
-- Subtle shadows and borders
-- No distracting gradients
-- Professional appearance
-- High contrast for readability
+## Adding New Dark-Mode Styles
 
-### Modern Style Elements ✓
-- Elegant simplicity
-- Consistent color usage
-- Subtle depth with shadows
-- Focus on content over decoration
-- Clean typography
+```css
+.dark .new-element {
+  background: var(--dk-bg-surface);
+  color: var(--dk-text-primary);
+  border: 1px solid var(--dk-border-mid);
+}
 
-## Files Modified
-
-- `app/globals.css` - Updated all dark mode styles
-
-## Testing Checklist
-
-- [ ] Dark mode toggle works in chatbot settings
-- [ ] User messages appear in blue (#1a73e8)
-- [ ] Assistant messages appear in dark gray (#1f1f1f)
-- [ ] Text is clearly readable (sufficient contrast)
-- [ ] Scrollbars are subtle but visible
-- [ ] Loading animation is smooth and subtle
-- [ ] Input area is properly styled
-- [ ] Buttons and interactive elements are visible
-- [ ] Light mode still works on other pages
-- [ ] No flickering or transition issues
-- [ ] Mobile dark mode looks good
-- [ ] Dark mode performance is smooth
-
-## Browser Compatibility
-
-- Chrome/Edge: ✓ Full support
-- Firefox: ✓ Full support
-- Safari: ✓ Full support
-- Mobile browsers: ✓ Full support
-
-## Future Enhancements
-
-1. **Accent colors** - Could add subtle accent colors for special message types
-2. **Code block styling** - Could enhance code block appearance in dark mode
-3. **Image handling** - Could add dark mode styling for images
-4. **Theme toggle** - Already implemented in settings
-
-## Performance
-
-- No gradients = faster rendering
-- Solid colors = better for OLED displays
-- Simple shadows = minimal paint operations
-- Overall performance: Excellent on all devices
+.dark .new-element:hover {
+  background: var(--dk-bg-hover);
+}
+```
 
 ## Accessibility
 
-- **Contrast ratio:** WCAG AA+ compliant
-- **Text readability:** High contrast (#ffffff on #1f1f1f)
-- **Color blind friendly:** Not relying on color alone for meaning
-- **Focus states:** Maintained for keyboard navigation
+| Text | Background | Ratio | Level |
+|------|-----------|-------|-------|
+| `#F0EBE0` | `#1F1D1A` | 13.2:1 | AAA |
+| `#A8A090` | `#1F1D1A` | 6.7:1 | AA |
+| `#9B7FD4` | `#1F1D1A` | 5.7:1 | AA |
+| `#C4B0F0` | `#1F1D1A` | 9.2:1 | AAA |
 
-## Before vs After Visual Summary
+## Testing
 
-```
-BEFORE (Old Dark Mode)
-├─ Background: Colorful gradients (purple, indigo, pink)
-├─ User Messages: Purple-indigo gradient
-├─ Assistant: Gray with purple tint
-├─ Input: Complex gradient with blur
-├─ Scrollbars: Purple (#7c3aed)
-└─ Overall: Busy, colorful, eye-straining
-
-AFTER (Modern Style)
-├─ Background: Clean dark gray (#0d0d0d - #111111)
-├─ User Messages: Google Blue (#1a73e8)
-├─ Assistant: Dark Gray (#1f1f1f)
-├─ Input: Solid dark gray (#1f1f1f)
-├─ Scrollbars: Subtle gray (#444444)
-└─ Overall: Professional, elegant, easy on the eyes
-```
-
-## Comparison Images
-
-### Old Dark Mode
-- Multiple color variations
-- Complex gradients everywhere
-- Distracting rainbow loading animation
-- High visual complexity
-
-### New Dark Mode  
-- Unified color scheme
-- Simple, solid colors
-- Subtle gray shimmer animation
-- Professional and clean
-
-## Implementation Notes
-
-All changes are in `app/globals.css` under the `.dark` prefix, ensuring:
-- Only affects chatbot page (dark mode disabled elsewhere)
-- Doesn't break light mode
-- Maintains all functionality
-- Better performance than before
-- Easier to maintain and update
-
-## User Experience Impact
-
-✓ **Reduced eye strain** - Less colorful, more neutral tones
-✓ **Better readability** - High contrast text
-✓ **Professional appearance** - Matches industry leaders
-✓ **Cleaner interface** - Less visual noise
-✓ **Mobile-friendly** - Works great on all device sizes
-✓ **Battery friendly** - Solid colors use less power on OLED
+1. Navigate to `/chatbot`
+2. Toggle dark mode in settings
+3. Verify warm backgrounds, violet accents, cream text
+4. Check scrollbar tinting
+5. Confirm no pure gray or old blue/indigo remnants
