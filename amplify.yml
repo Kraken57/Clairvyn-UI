@@ -3,12 +3,11 @@ frontend:
   phases:
     preBuild:
       commands:
-        - nvm install 20
         - nvm use 20
         - cd frontend && npm ci
     build:
       commands:
-        - cd frontend && npm run build
+        - cd $CODEBUILD_SRC_DIR/frontend && npm run build
   artifacts:
     baseDirectory: dist
     files:
@@ -16,8 +15,3 @@ frontend:
   cache:
     paths:
       - frontend/node_modules/**/*
-  customHeaders:
-    - pattern: '**/*'
-      headers:
-        - key: Cache-Control
-          value: 'public, max-age=0, must-revalidate'
