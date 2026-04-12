@@ -58,6 +58,19 @@ export function canUserGenerate(userId: string): boolean {
   return getUserGenerationsUsed(userId) < FREE_GUEST_GENERATIONS
 }
 
+/** Sync the local counter with the server-reported generation count. */
+export function syncUserGenerations(userId: string, serverCount: number): void {
+  if (typeof window === "undefined") return
+  try {
+    const current = getUserGenerationsUsed(userId)
+    if (serverCount > current) {
+      localStorage.setItem(getUserGenKey(userId), String(serverCount))
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function incrementUserGenerations(userId: string): number {
   if (typeof window === "undefined") return 1
   const next = getUserGenerationsUsed(userId) + 1

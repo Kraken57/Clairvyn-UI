@@ -66,7 +66,7 @@ export default function SignInPage() {
       
       router.push("/chatbot")
     } catch (error: any) {
-      setError(error.message || "An error occurred")
+      setError(friendlyAuthError(error))
     } finally {
       setIsLoading(false)
     }
@@ -79,7 +79,6 @@ export default function SignInPage() {
     try {
       await signInWithGoogle({ rememberMe })
       
-      // Clear redirect flags on successful login for clean state
       if (typeof window !== "undefined") {
         try {
           sessionStorage.removeItem("fromChatbot")
@@ -91,9 +90,29 @@ export default function SignInPage() {
       
       router.push("/chatbot")
     } catch (error: any) {
-      setError(error.message || "An error occurred")
+      setError(friendlyAuthError(error))
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  function friendlyAuthError(error: any): string {
+    const code = error?.code || ""
+    switch (code) {
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+      case "auth/invalid-credential":
+        return "Incorrect email or password."
+      case "auth/too-many-requests":
+        return "Too many failed attempts. Please try again later."
+      case "auth/account-exists-with-different-credential":
+        return "An account with this email already exists. Try signing in with your email and password."
+      case "auth/popup-closed-by-user":
+        return "Sign-in popup was closed. Please try again."
+      case "auth/network-request-failed":
+        return "Network error. Please check your connection."
+      default:
+        return error?.message || "An error occurred. Please try again."
     }
   }
 

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { X, MessageSquare, Bug, Star } from "lucide-react"
 import { analytics } from "@/lib/analytics"
+import { getBackendUrl } from "@/lib/backendApi"
 
 type FeedbackType = "bug" | "feature" | "rating"
 
@@ -34,7 +35,7 @@ export function FeedbackWidget({
       })
 
       // Send to backend
-      const response = await fetch("/api/feedback", {
+      const response = await fetch(getBackendUrl("/api/feedback"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

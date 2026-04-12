@@ -320,21 +320,28 @@ export const simulateAIResponse = async (userMessage: string): Promise<string> =
   }
 };
 
-// Delete a chat session from local storage only.
-// The chat remains on the backend (soft delete from user's perspective).
-// Token parameter is kept for backward compatibility but unused.
 export const deleteChatSession = async (
   userId: string,
   chatId: string,
   token: string | null
 ): Promise<boolean> => {
   try {
+    if (token) {
+      try {
+        await apiFetch(`/api/chats/${encodeURIComponent(chatId)}`, {
+          method: "DELETE",
+          token,
+        });
+      } catch (err) {
+        console.warn("[Clairvyn:chat] deleteChatSession backend failed", { chatId, err });
+      }
+    }
     const sessions = getSessionsFromStorage(userId).filter((s) => s.id !== chatId);
     saveSessionsToStorage(userId, sessions);
-    console.log("[Clairvyn:chat] deleteChatSession (local only)", { userId, chatId });
+    console.log("[Clairvyn:chat] deleteChatSession", { userId, chatId });
     return true;
   } catch (error) {
-    console.error("[Clairvyn:chat] deleteChatSession local update error", { chatId, error });
+    console.error("[Clairvyn:chat] deleteChatSession error", { chatId, error });
     return false;
   }
 };

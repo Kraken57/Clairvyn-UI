@@ -13,6 +13,10 @@ import {
   setPersistence,
   browserLocalPersistence,
   browserSessionPersistence,
+  fetchSignInMethodsForEmail,
+  linkWithCredential,
+  EmailAuthProvider,
+  OAuthProvider,
 } from "firebase/auth"
 import { auth } from "@/lib/firebase"
 
@@ -110,33 +114,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await applyAuthPersistence(options?.rememberMe ?? true)
     const provider = new GoogleAuthProvider()
     
-    // Request additional profile scopes
     provider.addScope('profile')
     provider.addScope('email')
-    provider.setCustomParameters({
-      prompt: 'consent'
-    })
+    provider.setCustomParameters({ prompt: 'select_account' })
     
     try {
       if (auth.currentUser && !auth.currentUser.isAnonymous) {
-        // Already signed in with another method → link Google to existing account
         const result = await (auth.currentUser as any).linkWithPopup(provider)
-        // Update profile with Google data
         await updateUserProfileFromGoogle(result.user)
         console.log("Google provider linked to existing account")
       } else {
-        // First time → just sign in
         const result = await signInWithPopup(auth, provider)
-        // Update profile with Google data (name and photo URL)
         await updateUserProfileFromGoogle(result.user)
         console.log("Signed in with Google")
       }
     } catch (error: any) {
       if (error.code === 'auth/credential-already-in-use') {
-        // Google email already linked to different account - sign in instead
         const result = await signInWithPopup(auth, provider)
         await updateUserProfileFromGoogle(result.user)
         console.log("Signed in with Google (different account)")
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        // User signed up with email/password and is now trying Google with the same email.
+        // Sign in with Google directly (Firebase allows this when "One account per email" is set)
+        // and the accounts will be merged by the backend via email lookup.
+        try {
+          const googleCredential = GoogleAuthProvider.credentialFromError(error)
+          if (googleCredential) {
+            const result = await signInWithPopup(auth, provider)
+            await updateUserProfileFromGoogle(result.user)
+            console.log("Signed in with Google after account-exists-with-different-credential")
+          } else {
+            throw new Error(
+              "An account already exists with this email using a different sign-in method. " +
+              "Please sign in with your email and password first, then link Google from your profile."
+            )
+          }
+        } catch (linkError: any) {
+          if (linkError.code === 'auth/popup-closed-by-user') throw linkError
+          throw new Error(
+            "An account already exists with this email. Please sign in with your email and password."
+          )
+        }
       } else {
         throw error
       }

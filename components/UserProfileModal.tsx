@@ -83,8 +83,8 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
           if (cancelled || !data) return
           const profile = data.profile ?? data
           const uni = profile.university ?? profile.institution ?? ""
-          const loc = profile.location ?? profile.city ?? ""
-          const photo = profile.photo_url ?? profile.photoURL ?? ""
+          const loc = profile.city ?? profile.location ?? ""
+          const photo = data.photo_url ?? profile.photoURL ?? ""
           setFormData((prev) => ({
             ...prev,
             university: uni || prev.university,
@@ -206,7 +206,6 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
         return
       }
 
-      // Update backend
       const response = await fetch(getBackendUrl("/api/me/profile"), {
         method: "PATCH",
         headers: {
@@ -214,9 +213,8 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
           "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
-          displayName: formData.displayName,
           university: formData.university,
-          location: formData.location,
+          city: formData.location,
         }),
       })
 

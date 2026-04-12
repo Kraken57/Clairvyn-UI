@@ -1,3 +1,5 @@
+import { getBackendUrl } from "@/lib/backendApi"
+
 /**
  * Analytics service for tracking user interactions, page views, and performance
  */
@@ -79,7 +81,7 @@ class AnalyticsService {
 
     // Send to backend (fire and forget)
     if (typeof window !== "undefined") {
-      navigator.sendBeacon("/api/analytics/page-view", JSON.stringify(event))
+      navigator.sendBeacon(getBackendUrl("/api/analytics/page-view"), JSON.stringify(event))
     }
   }
 
@@ -97,7 +99,7 @@ class AnalyticsService {
 
     // Send to backend
     if (typeof window !== "undefined") {
-      navigator.sendBeacon("/api/analytics/click", JSON.stringify(event))
+      navigator.sendBeacon(getBackendUrl("/api/analytics/click"), JSON.stringify(event))
     }
   }
 
@@ -113,7 +115,7 @@ class AnalyticsService {
 
     // Send to backend
     if (typeof window !== "undefined") {
-      navigator.sendBeacon("/api/analytics/event", JSON.stringify(event))
+      navigator.sendBeacon(getBackendUrl("/api/analytics/event"), JSON.stringify(event))
     }
   }
 

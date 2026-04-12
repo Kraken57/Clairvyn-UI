@@ -44,7 +44,7 @@ import {
   loadMessagesForChat,
 } from "@/lib/chat-service"
 import { apiFetch, getBackendUrl } from "@/lib/backendApi"
-import { FREE_GUEST_GENERATIONS, canUserGenerate, incrementUserGenerations } from "@/lib/guest-limits"
+import { FREE_GUEST_GENERATIONS, canUserGenerate, incrementUserGenerations, syncUserGenerations } from "@/lib/guest-limits"
 import { profileCountryMissing } from "@/lib/meProfile"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useClairvynOnboarding } from "@/hooks/useClairvynOnboarding"
@@ -329,6 +329,9 @@ export default function ChatbotPage() {
             return
           }
           if (typeof data.has_paid === "boolean") setHasPaid(data.has_paid)
+          if (typeof data.generation_count === "number" && user?.uid) {
+            syncUserGenerations(user.uid, data.generation_count)
+          }
           const backendPhoto = getProfileImageFromMe(data)
           console.log("[Clairvyn] resolved sidebar profile image:", backendPhoto ?? user.photoURL ?? null)
           setProfileImageUrl(backendPhoto ?? user.photoURL ?? null)
@@ -354,6 +357,7 @@ export default function ChatbotPage() {
   const [isLoading, setIsLoading] = useState(false)
   /** True only while waiting for POST /turn (not e.g. new chat creation). */
   const [isTurnInFlight, setIsTurnInFlight] = useState(false)
+  const [queuePosition, setQueuePosition] = useState<number>(0)
   const [assistantStatusLine, setAssistantStatusLine] = useState(
     ASSISTANT_STATUS_PHASES[0][0]
   )
@@ -595,37 +599,9 @@ export default function ChatbotPage() {
       console.log("[Clairvyn] ensureBackendChat: already have id", { backendChatId });
       return backendChatId
     }
-    const token = await getIdToken()
-    if (!token) {
-      console.error("[Clairvyn] ensureBackendChat: no token")
-      throw new Error("Missing auth token")
-    }
-
-    try {
-      console.log("[Clairvyn] ensureBackendChat: creating backend chat", { currentChatId });
-      const data = await apiFetch<{ id: string | number; title: string | null; metadata: any }>(
-        "/api/chats",
-        {
-          method: "POST",
-          body: { title: null, metadata: {} },
-          token,
-        }
-      )
-      const backendId = String(data.id)
-      if (currentChatId && currentChatId !== backendId) {
-        if (user) {
-          await renameChatSession(user.uid, currentChatId, backendId)
-          setCurrentChatId(backendId)
-          setLastActiveChatId(user.uid, backendId)
-        }
-      }
-      setBackendChatId(backendId)
-      console.log("[Clairvyn] ensureBackendChat: done", { backendId, title: data.title });
-      return backendId
-    } catch (err) {
-      console.error("[Clairvyn] ensureBackendChat failed", err)
-      return null
-    }
+    // Return "0" to signal chat_turn should auto-create the chat server-side.
+    // This avoids the race condition of creating a chat and then sending a turn separately.
+    return "0"
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -760,16 +736,30 @@ export default function ChatbotPage() {
         )
       } catch (err: any) {
         console.error("[Clairvyn] handleSubmit: turn request failed", { chatId, error: err?.message ?? err });
+        if (err?.message?.includes("generation_limit_reached") || err?.message?.includes("403")) {
+          setWaitlistOpen(true)
+          return
+        }
         throw err;
       }
 
-      // if backend returned chat_id we can cache it
+      // If backend returned chat_id (e.g. from auto-create), cache it and rename local session
       if (data.chat_id != null) {
-        setBackendChatId(String(data.chat_id))
+        const newBackendId = String(data.chat_id)
+        setBackendChatId(newBackendId)
+        if (activeChatId && activeChatId !== newBackendId && user) {
+          await renameChatSession(user.uid, activeChatId, newBackendId)
+          setCurrentChatId(newBackendId)
+          setLastActiveChatId(user.uid, newBackendId)
+          activeChatId = newBackendId
+        }
       }
 
       // If backend returned a task_id, poll until done
       let finalData = data;
+      if (data.queue_position != null && data.queue_position > 0) {
+        setQueuePosition(data.queue_position)
+      }
       if (data.task_id && !data.history) {
         const resolvedChatId = data.chat_id ?? chatId;
         const taskId = data.task_id;
@@ -789,13 +779,19 @@ export default function ChatbotPage() {
                 `/api/chats/${encodeURIComponent(resolvedChatId)}/tasks/${encodeURIComponent(taskId)}`,
                 { method: "GET", token }
               );
+              if (pollData.queue_position != null) {
+                setQueuePosition(pollData.queue_position)
+              }
               if (pollData.status === "SUCCESS") {
                 clearInterval(interval);
+                setQueuePosition(0);
                 finalData = pollData;
                 resolve();
               } else if (pollData.status === "FAILURE") {
                 clearInterval(interval);
-                reject(new Error(pollData.error || "Floor plan generation failed."));
+                setQueuePosition(0);
+                const errMsg = pollData.result?.error || pollData.error || "Floor plan generation failed.";
+                reject(new Error(errMsg));
               }
               // PENDING or STARTED — keep polling
             } catch (e) {
@@ -1747,14 +1743,16 @@ export default function ChatbotPage() {
 
                     <AnimatePresence mode="wait">
                       <motion.span
-                        key={assistantStatusLine}
+                        key={queuePosition > 0 ? `queue-${queuePosition}` : assistantStatusLine}
                         initial={{ opacity: 0, x: -8 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 8 }}
                         transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                         className="text-xs sm:text-sm font-medium text-gray-600 dark:text-[#A8A090] min-w-0 flex-1"
                       >
-                        {assistantStatusLine}
+                        {queuePosition > 0
+                          ? `Many users are generating right now — you're #${queuePosition} in line. Your floor plan will be ready in a few minutes, even if you close this tab.`
+                          : assistantStatusLine}
                       </motion.span>
                     </AnimatePresence>
                   </div>
