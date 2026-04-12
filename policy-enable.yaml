@@ -1,8 +1,0 @@
-name: projects/project-b06485e8-bc2e-4d06-82a/policies/iam.managed.disableServiceAccountApiKeyCreation
-spec:
-  rules:
-  - enforce: true
-    parameters:
-      allowedServices:
-      - generativelanguage.googleapis.com
-
