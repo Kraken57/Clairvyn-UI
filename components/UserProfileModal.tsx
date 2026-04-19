@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getBackendUrl } from "@/lib/backendApi"
+import { skipOptionalBackendIntegrations } from "@/lib/investorMode"
 
 interface UserProfileModalProps {
   isOpen: boolean
@@ -145,6 +146,13 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
           
           if (!token) {
             setError("Authentication failed. Please sign in again.")
+            setIsLoading(false)
+            return
+          }
+
+          if (skipOptionalBackendIntegrations()) {
+            setSuccess("Photo saved locally.")
+            setTimeout(() => setSuccess(""), 2000)
             setIsLoading(false)
             return
           }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { X, MessageSquare, Bug, Star } from "lucide-react"
 import { analytics } from "@/lib/analytics"
 import { getBackendUrl } from "@/lib/backendApi"
+import { skipOptionalBackendIntegrations } from "@/lib/investorMode"
 
 type FeedbackType = "bug" | "feature" | "rating"
 
@@ -34,7 +35,18 @@ export function FeedbackWidget({
         rating: selectedType === "rating" ? rating : undefined,
       })
 
-      // Send to backend
+      if (skipOptionalBackendIntegrations()) {
+        setSubmitted(true)
+        setTimeout(() => {
+          setIsOpen(false)
+          setSelectedType(null)
+          setMessage("")
+          setRating(0)
+          setSubmitted(false)
+        }, 2000)
+        return
+      }
+
       const response = await fetch(getBackendUrl("/api/feedback"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },

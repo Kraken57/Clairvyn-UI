@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { apiFetch } from "./backendApi";
+import { apiPath } from "./apiRoutes";
+import { apiFetch, isBackendNumericChatId } from "./backendApi";
 import { isInvestorMode } from "./investorMode";
 
 export interface Message {
@@ -185,35 +186,7 @@ export const addMessageToChat = async (
   }
 };
 
-// Get messages for a chat session
-export const getChatMessages = async (userId: string, chatId: string, token?: string): Promise<Message[]> => {
-  console.log("[Clairvyn:chat] getChatMessages", { chatId, hasToken: !!token });
-  if (token || isInvestorMode()) {
-    try {
-      const data = await apiFetch<any>(
-        `/api/chats/${encodeURIComponent(chatId)}/messages`,
-        { method: "GET", token: token ?? null }
-      );
-      const array: any[] = Array.isArray(data) ? data : [];
-      const hist: Message[] = array.map((m) => ({
-        id: m.id,
-        role: m.sender_type === "user" ? "user" : "assistant",
-        content: m.content ?? "",
-        timestamp:
-          typeof m.created_at === "string"
-            ? m.created_at
-            : (m.created_at as Date)?.toISOString?.() ?? new Date().toISOString(),
-        image_url: m.image_url ?? undefined,
-        extra_data: m.extra_data ?? undefined,
-        feedback_submitted: Boolean(m.feedback_submitted),
-      }));
-      console.log("[Clairvyn:chat] getChatMessages → backend", { chatId, count: hist.length });
-      return hist;
-    } catch (err) {
-      console.warn("[Clairvyn:chat] getChatMessages backend failed, using local", { chatId, err });
-    }
-  }
-
+function getLocalChatMessages(userId: string, chatId: string): Message[] {
   try {
     const sessions = getSessionsFromStorage(userId);
     const session = sessions.find((s) => s.id === chatId);
@@ -224,6 +197,44 @@ export const getChatMessages = async (userId: string, chatId: string, token?: st
     console.error("[Clairvyn:chat] getChatMessages error", { chatId, error });
     return [];
   }
+}
+
+function mapApiMessagesPayload(data: unknown): Message[] {
+  const array: any[] = Array.isArray(data) ? data : [];
+  return array.map((m) => ({
+    id: m.id,
+    role: m.sender_type === "user" ? "user" : "assistant",
+    content: m.content ?? "",
+    timestamp:
+      typeof m.created_at === "string"
+        ? m.created_at
+        : (m.created_at as Date)?.toISOString?.() ?? new Date().toISOString(),
+    image_url: m.image_url ?? undefined,
+    extra_data: m.extra_data ?? undefined,
+    feedback_submitted: Boolean(m.feedback_submitted),
+  }));
+}
+
+// Get messages for a chat session
+export const getChatMessages = async (userId: string, chatId: string, token?: string): Promise<Message[]> => {
+  console.log("[Clairvyn:chat] getChatMessages", { chatId, hasToken: !!token });
+  if (token || isInvestorMode()) {
+    if (isBackendNumericChatId(chatId)) {
+      try {
+        const data = await apiFetch<any>(apiPath.chatMessages(chatId), {
+          method: "GET",
+          token: token ?? null,
+        });
+        const hist = mapApiMessagesPayload(data);
+        console.log("[Clairvyn:chat] getChatMessages → backend", { chatId, count: hist.length });
+        return hist;
+      } catch (err) {
+        console.warn("[Clairvyn:chat] getChatMessages backend failed, using local", { chatId, err });
+      }
+    }
+  }
+
+  return getLocalChatMessages(userId, chatId);
 };
 
 /** Load messages for a chat (backend when token works, else local). */
@@ -232,16 +243,18 @@ export async function loadMessagesForChat(
   chatId: string,
   token: string | null | undefined
 ): Promise<{ messages: Message[]; fromBackend: boolean }> {
-  if (token || isInvestorMode()) {
+  if ((token || isInvestorMode()) && isBackendNumericChatId(chatId)) {
     try {
-      const sessionMessages = await getChatMessages(userId, chatId, token);
-      return { messages: sessionMessages, fromBackend: true };
+      const data = await apiFetch<any>(apiPath.chatMessages(chatId), {
+        method: "GET",
+        token: token ?? null,
+      });
+      return { messages: mapApiMessagesPayload(data), fromBackend: true };
     } catch (err) {
       console.warn("[Clairvyn:chat] loadMessagesForChat backend failed, using local", { chatId, err });
     }
   }
-  const sessionMessages = await getChatMessages(userId, chatId);
-  return { messages: sessionMessages, fromBackend: false };
+  return { messages: getLocalChatMessages(userId, chatId), fromBackend: false };
 }
 
 // Get all chat sessions for a user
@@ -252,7 +265,7 @@ export const getUserChatSessions = async (
   console.log("[Clairvyn:chat] getUserChatSessions", { userId, hasToken: !!token });
   if (token || isInvestorMode()) {
     try {
-      const raw = await apiFetch<unknown>(`/api/chats`, {
+      const raw = await apiFetch<unknown>(apiPath.chats(), {
         method: "GET",
         token: token ?? null,
       });
@@ -264,17 +277,27 @@ export const getUserChatSessions = async (
       }
 
       const backendSessions = raw as any[];
-      const converted: ChatSession[] = backendSessions.map((s) => ({
-        id: String(s.id),
-        userId,
-        title: s.title ?? null,
-        messages: [],
-        createdAt: new Date(s.created_at || s.createdAt || Date.now()),
-        updatedAt: new Date(s.updated_at || s.updatedAt || Date.now()),
-      }));
+      const existingById = new Map(
+        getSessionsFromStorage(userId).map((s) => [s.id, s])
+      );
+      const converted: ChatSession[] = backendSessions.map((s) => {
+        const id = String(s.id);
+        const prev = existingById.get(id);
+        return {
+          id,
+          userId,
+          title: s.title ?? null,
+          // Never wipe message history here — sidebar refresh runs after each turn and
+          // would erase assistant rows / extra_data in localStorage. Reload then showed
+          // only the user bubble if GET /messages failed or raced.
+          messages: prev?.messages ?? [],
+          createdAt: new Date(s.created_at || s.createdAt || prev?.createdAt || Date.now()),
+          updatedAt: new Date(s.updated_at || s.updatedAt || Date.now()),
+        };
+      });
 
       try {
-        // FIX: Only keep backend chats for current user, don't mix with old chats
+        // Session list + titles from backend; messages preserved from cache until setChatMessages / loadMessagesForChat updates them.
         saveSessionsToStorage(userId, converted);
       } catch {
         /* ignore cache failure */
@@ -328,13 +351,15 @@ export const deleteChatSession = async (
 ): Promise<boolean> => {
   try {
     if (token || isInvestorMode()) {
-      try {
-        await apiFetch(`/api/chats/${encodeURIComponent(chatId)}`, {
-          method: "DELETE",
-          token: token ?? null,
-        });
-      } catch (err) {
-        console.warn("[Clairvyn:chat] deleteChatSession backend failed", { chatId, err });
+      if (isBackendNumericChatId(chatId)) {
+        try {
+          await apiFetch(apiPath.chatDelete(chatId), {
+            method: "DELETE",
+            token: token ?? null,
+          });
+        } catch (err) {
+          console.warn("[Clairvyn:chat] deleteChatSession backend failed", { chatId, err });
+        }
       }
     }
     const sessions = getSessionsFromStorage(userId).filter((s) => s.id !== chatId);

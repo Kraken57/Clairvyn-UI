@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { handleScriptedInput } from "@/lib/demoScript"
@@ -43,8 +43,9 @@ import {
   setLastActiveChatId,
   loadMessagesForChat,
 } from "@/lib/chat-service"
-import { apiFetch, getBackendUrl } from "@/lib/backendApi"
-import { isInvestorMode } from "@/lib/investorMode"
+import { apiPath } from "@/lib/apiRoutes"
+import { apiFetch, getBackendUrl, investorFetchHeaders, isBackendNumericChatId } from "@/lib/backendApi"
+import { isInvestorMode, skipOptionalBackendIntegrations } from "@/lib/investorMode"
 import { FREE_GUEST_GENERATIONS, canUserGenerate, incrementUserGenerations, syncUserGenerations } from "@/lib/guest-limits"
 import { profileCountryMissing } from "@/lib/meProfile"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -87,6 +88,12 @@ const ASSISTANT_STATUS_PHASES: readonly (readonly string[])[] = [
 
 /** Phase boundaries (ms from start): start 0–2m, then mid, detail, final until done. */
 const ASSISTANT_PHASE_END_MS = [120_000, 300_000, 420_000] as const
+
+function clipErrorMessage(s: string, maxLen = 1200): string {
+  const t = s.trim()
+  if (!t) return ""
+  return t.length <= maxLen ? t : `${t.slice(0, maxLen).trim()} …`
+}
 
 type FeedbackType = "positive" | "negative"
 type FeedbackCategory =
@@ -167,11 +174,14 @@ function AuthImage({
       .current()
       .then((token) => {
         if (cancelled) return
+        // No token: still fetch (investor / DISABLE_API_AUTH / X-Clairvyn-Investor).
         if (!token) {
-          if (typeof window !== "undefined" && isInvestorMode()) {
-            return fetch(src)
-          }
-          return
+          const h = investorFetchHeaders(null)
+          return fetch(src, {
+            mode: "cors",
+            credentials: "omit",
+            ...(Object.keys(h).length ? { headers: h } : {}),
+          })
         }
         return fetch(src, { headers: { Authorization: `Bearer ${token}` } })
       })
@@ -372,6 +382,9 @@ export default function ChatbotPage() {
   const [backendChatId, setBackendChatId] = useState<string | null>(null)
   const [showGuestBanner, setShowGuestBanner] = useState(true)
   const [hasStarted, setHasStarted] = useState(false)
+  /** Latest messages for initChat race guard (async init must not clobber an in-flight send). */
+  const messagesRef = useRef<ChatMessage[]>([])
+  const isTurnInFlightRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [feedbackByMessage, setFeedbackByMessage] = useState<Record<string, MessageFeedbackState>>({})
   const [feedbackSubmittingByMessage, setFeedbackSubmittingByMessage] = useState<Record<string, boolean>>({})
@@ -380,6 +393,18 @@ export default function ChatbotPage() {
   // Chat history state (integrated into sidebar)
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+
+  /** Re-sync sidebar with backend after a turn (init may have run before the chat existed). */
+  const refreshChatSessions = useCallback(async () => {
+    if (!user || authLoading) return
+    const token = await getIdToken()
+    try {
+      const sessions = await getUserChatSessions(user.uid, token ?? undefined)
+      setChatSessions(sessions)
+    } catch (e) {
+      console.warn("[Clairvyn] refreshChatSessions failed", e)
+    }
+  }, [user, authLoading, getIdToken])
 
   // Guard to prevent initChat running concurrently for the same user (race condition fix)
   const initStartedForUidRef = useRef<string | null>(null)
@@ -393,6 +418,14 @@ export default function ChatbotPage() {
     el.style.height = "auto"
     el.style.height = `${el.scrollHeight}px`
   }, [inputValue])
+
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  useEffect(() => {
+    isTurnInFlightRef.current = isTurnInFlight
+  }, [isTurnInFlight])
 
   // Scroll to bottom whenever messages update or loading state changes
   useEffect(() => {
@@ -490,10 +523,20 @@ export default function ChatbotPage() {
           // No sessions yet — don't persist anything; wait for first message
           console.log("[Clairvyn] initChat: no sessions, starting blank")
           if (cancelled || submittingRef.current) return
+          // initChat is async: user may have already sent a message while we were loading sessions.
+          // Never wipe local UI in that case (was causing "blank screen" after first prompt).
+          if (messagesRef.current.length > 0 || isTurnInFlightRef.current) {
+            console.log("[Clairvyn] initChat: skip blank reset — local messages or turn in flight")
+            return
+          }
           setCurrentChatId(null)
           setMessages([])
           setHasStarted(false)
         } else {
+          if (messagesRef.current.length > 0 || isTurnInFlightRef.current || submittingRef.current) {
+            console.log("[Clairvyn] initChat: skip session restore — user already interacting")
+            return
+          }
           const preferredId = getLastActiveChatId(uid)
           const fallbackId = sessions[0].id
           const targetId =
@@ -540,13 +583,16 @@ export default function ChatbotPage() {
         }
       }
       initChat()
-      return () => { cancelled = true }
+      return () => {
+        cancelled = true
+        initStartedForUidRef.current = null
+      }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, authLoading])
 
   // After return from PhonePe: confirm payment, then refetch has_paid
   useEffect(() => {
-    if (isInvestorMode()) return
+    if (skipOptionalBackendIntegrations()) return
     if (typeof window === "undefined" || !user) return
     const params = new URLSearchParams(window.location.search)
     const paymentReturn = params.get("payment_return")
@@ -706,7 +752,7 @@ export default function ChatbotPage() {
       }
 
       const token = await getIdToken()
-      if (!token && !isInvestorMode()) {
+      if (!token && !isInvestorMode() && !isGuest) {
         throw new Error("Missing auth token")
       }
 
@@ -734,14 +780,11 @@ export default function ChatbotPage() {
 
       let data: any;
       try {
-        data = await apiFetch<any>(
-          `/api/chats/${encodeURIComponent(chatId)}/turn`,
-          {
-            method: "POST",
-            body: { content: userText, image_url: null },
-            token: token ?? null,
-          }
-        )
+        data = await apiFetch<any>(apiPath.chatTurn(chatId), {
+          method: "POST",
+          body: { content: userText, image_url: null },
+          token: token ?? null,
+        })
       } catch (err: any) {
         console.error("[Clairvyn] handleSubmit: turn request failed", { chatId, error: err?.message ?? err });
         if (err?.message?.includes("generation_limit_reached") || err?.message?.includes("403")) {
@@ -771,43 +814,40 @@ export default function ChatbotPage() {
       if (data.task_id && !data.history) {
         const resolvedChatId = data.chat_id ?? chatId;
         const taskId = data.task_id;
-        const POLL_INTERVAL_MS = 4000;
-        const MAX_POLLS = 75; // 5 minutes max
-        let polls = 0;
-        await new Promise<void>((resolve, reject) => {
-          const interval = setInterval(async () => {
-            polls++;
-            if (polls > MAX_POLLS) {
-              clearInterval(interval);
-              reject(new Error("Floor plan generation timed out. Please try again."));
-              return;
-            }
-            try {
-              const pollData = await apiFetch<any>(
-                `/api/chats/${encodeURIComponent(resolvedChatId)}/tasks/${encodeURIComponent(taskId)}`,
-                { method: "GET", token: token ?? null }
-              );
-              if (pollData.queue_position != null) {
-                setQueuePosition(pollData.queue_position)
-              }
-              if (pollData.status === "SUCCESS") {
-                clearInterval(interval);
-                setQueuePosition(0);
-                finalData = pollData;
-                resolve();
-              } else if (pollData.status === "FAILURE") {
-                clearInterval(interval);
-                setQueuePosition(0);
-                const errMsg = pollData.result?.error || pollData.error || "Floor plan generation failed.";
-                reject(new Error(errMsg));
-              }
-              // PENDING or STARTED — keep polling
-            } catch (e) {
-              clearInterval(interval);
-              reject(e);
-            }
-          }, POLL_INTERVAL_MS);
-        });
+        // Floor-plan jobs often need 5–10+ minutes; cap total wait ~18 minutes.
+        const POLL_INTERVAL_MS = 5_000;
+        const MAX_POLLS = 220;
+        let lastPoll: any = null;
+        for (let poll = 1; poll <= MAX_POLLS; poll++) {
+          const pollData = await apiFetch<any>(
+            apiPath.chatTask(resolvedChatId, taskId),
+            { method: "GET", token: token ?? null }
+          );
+          if (pollData.queue_position != null) {
+            setQueuePosition(pollData.queue_position)
+          }
+          if (pollData.status === "SUCCESS") {
+            setQueuePosition(0);
+            lastPoll = pollData;
+            break;
+          }
+          if (pollData.status === "FAILURE") {
+            setQueuePosition(0);
+            const errMsg =
+              pollData.result?.error ||
+              pollData.error ||
+              (typeof pollData.result === "string" ? pollData.result : null) ||
+              "Floor plan generation failed.";
+            throw new Error(errMsg);
+          }
+          if (poll < MAX_POLLS) {
+            await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          }
+        }
+        if (!lastPoll) {
+          throw new Error("Floor plan generation timed out. Please try again.");
+        }
+        finalData = lastPoll;
       }
 
       // Replace messages with server history
@@ -829,6 +869,22 @@ export default function ChatbotPage() {
         extra_data: m.extra_data ?? undefined,
         feedback_submitted: Boolean(m.feedback_submitted),
       }));
+
+      // Defensive: older bug marked failed generations as SUCCESS with only the user message in history.
+      const asyncTurn = Boolean(data.task_id && !data.history);
+      if (
+        asyncTurn &&
+        updatedHistory.length > 0 &&
+        !updatedHistory.some((m) => m.role === "assistant")
+      ) {
+        updatedHistory.push({
+          id: `assistant-fallback-${Date.now()}`,
+          role: "assistant",
+          content:
+            "Floor plan generation did not complete. Check that the backend has API credentials (e.g. Vertex / Gemini) and see server logs for details.",
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       if (activeChatId && user) {
         await setChatMessages(user.uid, activeChatId, updatedHistory)
@@ -860,17 +916,38 @@ export default function ChatbotPage() {
           )
         )
       }
+
+      await refreshChatSessions()
     } catch (error: any) {
       console.error("[Clairvyn] handleSubmit: error", { message: error?.message, code: (error as any)?.code })
+      const raw = String(error?.message ?? error ?? "").trim()
       let content = "I'm sorry, I encountered an error. Please try again."
 
-      // peek at error to give a more helpful hint
       if (
-        error?.message?.includes('socket hang up') ||
-        error?.code === 'ECONNRESET'
+        raw.includes("socket hang up") ||
+        (error as any)?.code === "ECONNRESET" ||
+        raw.includes("Failed to fetch")
       ) {
         content =
-          "Unable to reach the AI backend – is the server running on port 5000?"
+          "Unable to reach the AI backend. Start Flask on the port in frontend/.env.local (BACKEND_PORT / NEXT_PUBLIC_API_BASE_URL), e.g. http://127.0.0.1:5002."
+      } else if (raw.startsWith("API ")) {
+        // apiFetch: `API 500: {"error":"..."}`
+        const brace = raw.indexOf("{")
+        if (brace >= 0) {
+          try {
+            const parsed = JSON.parse(raw.slice(brace)) as { error?: string; message?: string }
+            if (parsed.error) content = parsed.error
+            else if (parsed.message) content = parsed.message
+          } catch {
+            /* ignore */
+          }
+        }
+        if (content === "I'm sorry, I encountered an error. Please try again.") {
+          content = clipErrorMessage(raw, 900)
+        }
+      } else if (raw) {
+        // Poll FAILURE, timeout, or other thrown Error(...) — never hide long messages behind the generic line
+        content = clipErrorMessage(raw, 1200)
       }
 
       const errorMessage: Omit<ChatMessage, 'timestamp'> = {
@@ -898,7 +975,12 @@ export default function ChatbotPage() {
   const submitFeedback = async (message: ChatMessage, index: number) => {
     const key = getFeedbackKey(message, index)
     const state = feedbackByMessage[key] ?? {}
-    const chatId = backendChatId ?? currentChatId
+    const chatId =
+      isBackendNumericChatId(backendChatId)
+        ? backendChatId
+        : isBackendNumericChatId(currentChatId)
+          ? currentChatId
+          : null
     const messageIdRaw = (message as any)?.id
     const messageId = Number(messageIdRaw)
     const alreadySubmittedFromBackend = Boolean((message as any)?.feedback_submitted)
@@ -925,7 +1007,7 @@ export default function ChatbotPage() {
       if (!token && !isInvestorMode()) throw new Error("Missing auth token")
 
       await apiFetch(
-        `/api/chats/${encodeURIComponent(chatId)}/feedback`,
+        apiPath.chatFeedback(chatId),
         {
           method: "POST",
           body: {
@@ -955,7 +1037,11 @@ export default function ChatbotPage() {
   }
 
   const downloadDxf = async (documentId: string) => {
-    const chatId = backendChatId ?? currentChatId
+    const chatId = isBackendNumericChatId(backendChatId)
+      ? backendChatId
+      : isBackendNumericChatId(currentChatId)
+        ? currentChatId
+        : null
     console.log("[Clairvyn] downloadDxf", { documentId, chatId });
     if (!chatId) {
       console.warn("[Clairvyn] downloadDxf: no chatId");
@@ -967,8 +1053,8 @@ export default function ChatbotPage() {
       return
     }
     try {
-      const url = getBackendUrl(`/api/chats/${encodeURIComponent(chatId)}/files/${documentId}.dxf`)
-      const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : {})
+      const url = getBackendUrl(apiPath.chatFile(chatId, `${documentId}.dxf`))
+      const res = await fetch(url, { headers: investorFetchHeaders(token) })
       if (!res.ok) throw new Error(res.statusText)
       const blob = await res.blob()
       const href = URL.createObjectURL(blob)
@@ -986,7 +1072,11 @@ export default function ChatbotPage() {
   }
 
   const downloadPng = async (documentId: string) => {
-    const chatId = backendChatId ?? currentChatId
+    const chatId = isBackendNumericChatId(backendChatId)
+      ? backendChatId
+      : isBackendNumericChatId(currentChatId)
+        ? currentChatId
+        : null
     if (!chatId) {
       console.warn("[Clairvyn] downloadPng: no chatId");
       return
@@ -997,8 +1087,8 @@ export default function ChatbotPage() {
       return
     }
     try {
-      const url = getBackendUrl(`/api/chats/${encodeURIComponent(chatId)}/files/${documentId}.png`)
-      const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : {})
+      const url = getBackendUrl(apiPath.chatFile(chatId, `${documentId}.png`))
+      const res = await fetch(url, { headers: investorFetchHeaders(token) })
       if (!res.ok) throw new Error(res.statusText)
       const blob = await res.blob()
       const href = URL.createObjectURL(blob)
@@ -1560,7 +1650,7 @@ export default function ChatbotPage() {
                     }`}
                 >
                   <div className="text-xs sm:text-base leading-relaxed lg:text-[15.5px] lg:leading-[1.78] space-y-1">
-                    {message.content.split('\n').map((line: string, i: number) => (
+                    {(message.content ?? "").split('\n').map((line: string, i: number) => (
                       line === '' ? <div key={i} className="h-2" /> : <p key={i}>{line}</p>
                     ))}
                   </div>

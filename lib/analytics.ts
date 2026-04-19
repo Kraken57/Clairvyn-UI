@@ -1,4 +1,5 @@
 import { getBackendUrl } from "@/lib/backendApi"
+import { skipOptionalBackendIntegrations } from "@/lib/investorMode"
 
 /**
  * Analytics service for tracking user interactions, page views, and performance
@@ -79,8 +80,7 @@ class AnalyticsService {
     this.events.push(event)
     this.saveEvents()
 
-    // Send to backend (fire and forget)
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !skipOptionalBackendIntegrations()) {
       navigator.sendBeacon(getBackendUrl("/api/analytics/page-view"), JSON.stringify(event))
     }
   }
@@ -97,8 +97,7 @@ class AnalyticsService {
     this.events.push(event)
     this.saveEvents()
 
-    // Send to backend
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !skipOptionalBackendIntegrations()) {
       navigator.sendBeacon(getBackendUrl("/api/analytics/click"), JSON.stringify(event))
     }
   }
@@ -113,8 +112,7 @@ class AnalyticsService {
     this.events.push(event)
     this.saveEvents()
 
-    // Send to backend
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !skipOptionalBackendIntegrations()) {
       navigator.sendBeacon(getBackendUrl("/api/analytics/event"), JSON.stringify(event))
     }
   }

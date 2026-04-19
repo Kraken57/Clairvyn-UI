@@ -56,6 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    if (!auth) {
+      console.warn("[Clairvyn] Firebase is not configured (missing NEXT_PUBLIC_FIREBASE_*).")
+      setLoading(false)
+      return
+    }
+
     const guestMode = typeof window !== "undefined" && localStorage.getItem("guest") === "true"
     setIsGuest(guestMode)
 
@@ -237,7 +243,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     
-    await signOut(auth)
+    if (auth) {
+      await signOut(auth)
+    }
     if (isGuest) {
       exitGuestMode()
     }
@@ -246,6 +254,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const getIdToken = useCallback(
     async (forceRefresh = false): Promise<string | null> => {
       if (isInvestorMode()) return null
+      if (!auth) return null
       if (!auth.currentUser) return null
       try {
         return await auth.currentUser.getIdToken(forceRefresh)

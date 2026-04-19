@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Loader2, Sparkles, Zap, Crown, X, Check } from "lucide-react"
 import { getBackendUrl } from "@/lib/backendApi"
+import { skipOptionalBackendIntegrations } from "@/lib/investorMode"
 
 const PAYWALL_PRICE_INR = 299
 const FREE_GENERATIONS = 6
@@ -41,6 +42,10 @@ export function PaymentPaywallModal({
   const handlePayWithPhonePe = async () => {
     if (!hasUser) {
       onSignInClick()
+      return
+    }
+    if (skipOptionalBackendIntegrations()) {
+      setError("Payments are not available in local or preview builds.")
       return
     }
     setError(null)
