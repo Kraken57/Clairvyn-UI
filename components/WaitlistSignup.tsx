@@ -84,7 +84,7 @@ export function WaitlistSignup({
               type="email"
               name="email"
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder="Email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading || success}

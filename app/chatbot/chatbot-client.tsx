@@ -39,7 +39,6 @@ import {
   getUserChatSessions,
   deleteChatSession,
   clearUserSessions,
-  getLastActiveChatId,
   setLastActiveChatId,
   loadMessagesForChat,
 } from "@/lib/chat-service"
@@ -110,6 +109,12 @@ function syncCanonicalChatPath(
   if (pathname !== want) {
     router.replace(want, { scroll: false })
   }
+}
+
+/** `/chatbot` only — not `/chatbot/123` (new conversation vs opened thread). */
+function isBareChatbotPath(p: string): boolean {
+  const n = (p || "/").replace(/\/$/, "") || "/"
+  return n === "/chatbot"
 }
 
 type FeedbackType = "positive" | "negative"
@@ -353,6 +358,9 @@ export default function ChatbotClient() {
         .then((data) => {
           if (cancelled || !data) return
           console.log("[Clairvyn] /api/me user details:", data)
+          if (typeof data.display_name === "string" && data.display_name.trim().length > 0) {
+            setProfileDisplayName(data.display_name.trim())
+          }
           if (!isGuest && profileCountryMissing(data.profile)) {
             router.replace(POST_AUTH_ENTRY_PATH)
             return
@@ -372,6 +380,13 @@ export default function ChatbotClient() {
     }
   }, [user, isGuest, getIdToken, router])
 
+  useEffect(() => {
+    const fallback = (user?.displayName || "").trim()
+    if (fallback) {
+      setProfileDisplayName((prev) => prev || fallback)
+    }
+  }, [user?.displayName])
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [typing, setTyping] = useState(false)
   const [inputValue, setInputValue] = useState("")
@@ -380,7 +395,9 @@ export default function ChatbotClient() {
   const [isFirstSubmit, setIsFirstSubmit] = useState<boolean>(true)
   const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
 
-  // Helper function for demo script
+  // Local scripted replies are disabled by default in production so every turn is server-persisted.
+  const allowLocalScriptedReplies =
+    process.env.NEXT_PUBLIC_ENABLE_LOCAL_SCRIPTED_REPLIES === "true"
   const addMessage = (msg: any) => setMessages(prev => [...prev, msg])
   const [isPencilHovered, setIsPencilHovered] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -394,6 +411,7 @@ export default function ChatbotClient() {
   const [backendChatId, setBackendChatId] = useState<string | null>(null)
   const [showGuestBanner, setShowGuestBanner] = useState(true)
   const [hasStarted, setHasStarted] = useState(false)
+  const [profileDisplayName, setProfileDisplayName] = useState("")
   /** Latest messages for initChat race guard (async init must not clobber an in-flight send). */
   const messagesRef = useRef<ChatMessage[]>([])
   const isTurnInFlightRef = useRef(false)
@@ -401,6 +419,7 @@ export default function ChatbotClient() {
   const [feedbackByMessage, setFeedbackByMessage] = useState<Record<string, MessageFeedbackState>>({})
   const [feedbackSubmittingByMessage, setFeedbackSubmittingByMessage] = useState<Record<string, boolean>>({})
   const [waitlistOpen, setWaitlistOpen] = useState(false)
+  const resolvedDisplayName = (profileDisplayName || user?.displayName || "").trim()
 
   // Chat history state (integrated into sidebar)
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
@@ -418,8 +437,9 @@ export default function ChatbotClient() {
     }
   }, [user, authLoading, getIdToken])
 
-  // Guard to prevent initChat running concurrently for the same user (race condition fix)
-  const initStartedForUidRef = useRef<string | null>(null)
+  /** Bumps when the auth init effect re-runs so stale async init cannot apply state (Strict Mode / fast remounts). */
+  const initGenerationRef = useRef(0)
+  const prevPathnameForNewChatRef = useRef<string | null>(null)
   // Guard to prevent concurrent handleSubmit calls (e.g. rapid double-click before React re-renders)
   const submittingRef = useRef(false)
 
@@ -500,20 +520,20 @@ export default function ChatbotClient() {
     }
   }, [isTurnInFlight])
 
-  // Load messages on mount - only create new local chat if user has no sessions (prevents duplicate from Strict Mode)
+  // Load sessions once per auth user. `/chatbot` = new conversation (no auto-restore). `/chatbot/:id` = that thread.
   useEffect(() => {
     console.log("[Clairvyn] init effect", { hasUser: !!user, currentChatId, authLoading });
     if (!user || authLoading) return
-    // Prevent concurrent runs for the same user (guards against getIdToken reference churn)
-    if (initStartedForUidRef.current === user.uid) return
-    initStartedForUidRef.current = user.uid
+
+    initGenerationRef.current += 1
+    const gen = initGenerationRef.current
 
     let cancelled = false
     const uid = user.uid
 
     const initChat = async () => {
-        const token = await getIdToken()
-        if (cancelled) return
+        let token = await getIdToken()
+        if (cancelled || gen !== initGenerationRef.current) return
         console.log("[Clairvyn] initChat: loading sessions", { hasToken: !!token });
         let sessions: ChatSession[] = []
 
@@ -528,20 +548,31 @@ export default function ChatbotClient() {
           sessions = await getUserChatSessions(uid)
         }
 
-        if (cancelled) return
+        if (cancelled || gen !== initGenerationRef.current) return
         console.log("[Clairvyn] initChat: sessions loaded", { count: sessions.length });
         setChatSessions(sessions)
+
+        const pathNow =
+          typeof window !== "undefined" ? window.location.pathname : "/chatbot"
+        const legacyQuery =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("chat")
+            : null
+        const hasLegacyChatParam =
+          Boolean(legacyQuery) && isBackendNumericChatId(legacyQuery || "")
+        /** Bare `/chatbot` with no `?chat=` — user expects a fresh chat, not "resume last". */
+        const wantBlankLanding =
+          isBareChatbotPath(pathNow) && !hasLegacyChatParam
+
         if (sessions.length === 0) {
-          // No sessions yet — don't persist anything; wait for first message
           console.log("[Clairvyn] initChat: no sessions, starting blank")
-          if (cancelled || submittingRef.current) return
-          // initChat is async: user may have already sent a message while we were loading sessions.
-          // Never wipe local UI in that case (was causing "blank screen" after first prompt).
+          if (cancelled || submittingRef.current || gen !== initGenerationRef.current) return
           if (messagesRef.current.length > 0 || isTurnInFlightRef.current) {
             console.log("[Clairvyn] initChat: skip blank reset — local messages or turn in flight")
             return
           }
           setCurrentChatId(null)
+          setBackendChatId(null)
           setMessages([])
           setHasStarted(false)
         } else {
@@ -549,45 +580,79 @@ export default function ChatbotClient() {
             console.log("[Clairvyn] initChat: skip session restore — user already interacting")
             return
           }
-          const pathSeg =
-            typeof window !== "undefined"
-              ? window.location.pathname.match(/^\/chatbot\/(\d+)$/)?.[1] ?? null
-              : null
-          const legacyQuery =
-            typeof window !== "undefined"
-              ? new URLSearchParams(window.location.search).get("chat")
-              : null
+
+          if (wantBlankLanding) {
+            console.log("[Clairvyn] initChat: /chatbot — new conversation (no last-chat restore)")
+            if (cancelled || gen !== initGenerationRef.current) return
+            setCurrentChatId(null)
+            setBackendChatId(null)
+            setMessages([])
+            setHasStarted(false)
+            return
+          }
+
+          const pathSeg = pathNow.match(/^\/chatbot\/(\d+)$/)?.[1] ?? null
           const urlChat =
             pathSeg && isBackendNumericChatId(pathSeg)
               ? pathSeg
               : legacyQuery && isBackendNumericChatId(legacyQuery)
                 ? legacyQuery
                 : null
+
           let targetId: string | null = null
-          if (urlChat && token) {
+          if (urlChat) {
+            // Token can be transiently null right after auth restore; retry once before failing deep-link load.
+            if (!token) {
+              token = await getIdToken(true)
+              if (cancelled || gen !== initGenerationRef.current) return
+            }
             if (sessions.some((s) => s.id === urlChat)) {
               targetId = urlChat
-            } else {
+            } else if (token) {
               const probe = await loadMessagesForChat(uid, urlChat, token)
+              if (cancelled || gen !== initGenerationRef.current) return
               if (probe.fromBackend) targetId = urlChat
             }
           }
+
           if (!targetId) {
-            const preferredId = getLastActiveChatId(uid)
-            const fallbackId = sessions[0].id
-            targetId =
-              preferredId && sessions.some((s) => s.id === preferredId) ? preferredId : fallbackId
+            if (urlChat) {
+              console.warn("[Clairvyn] initChat: deep-linked chat not found or inaccessible", {
+                pathNow,
+                urlChat,
+              })
+              if (cancelled || gen !== initGenerationRef.current) return
+              setCurrentChatId(urlChat)
+              setBackendChatId(null)
+              setMessages([
+                {
+                  role: "assistant",
+                  content:
+                    "I couldn't load this chat. It may not exist anymore, you may not have access, or your session expired. Please open it from the sidebar or refresh after signing in again.",
+                  timestamp: new Date().toISOString(),
+                },
+              ])
+              setHasStarted(true)
+              return
+            }
+            console.log("[Clairvyn] initChat: no deep-linked chat — starting blank", {
+              pathNow,
+              legacyQuery,
+            })
+            if (cancelled || gen !== initGenerationRef.current) return
+            setCurrentChatId(null)
+            setBackendChatId(null)
+            setMessages([])
+            setHasStarted(false)
+            return
           }
-          console.log("[Clairvyn] initChat: restoring session", {
-            targetId,
-            pathSeg,
-            legacyQuery,
-          })
+
+          console.log("[Clairvyn] initChat: restoring session", { targetId })
 
           const { messages: sessionMessages, fromBackend: loadedFromBackend } =
             await loadMessagesForChat(uid, targetId, token)
 
-          if (cancelled || submittingRef.current) return
+          if (cancelled || submittingRef.current || gen !== initGenerationRef.current) return
 
           if (loadedFromBackend) {
             await setChatMessages(
@@ -604,7 +669,7 @@ export default function ChatbotClient() {
             setBackendChatId(targetId)
           }
 
-          if (cancelled || submittingRef.current) return
+          if (cancelled || submittingRef.current || gen !== initGenerationRef.current) return
           setCurrentChatId(targetId)
           setMessages(
             sessionMessages.map((m) => ({
@@ -622,7 +687,6 @@ export default function ChatbotClient() {
       initChat()
       return () => {
         cancelled = true
-        initStartedForUidRef.current = null
       }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, authLoading])
@@ -636,6 +700,24 @@ export default function ChatbotClient() {
       router.replace(`/chatbot/${q}`, { scroll: false })
     }
   }, [pathname, router])
+
+  /** Client navigation /chatbot/:id → /chatbot (e.g. New chat, logo) — clear thread without re-running full init. */
+  useEffect(() => {
+    if (!user || authLoading) return
+    const prev = prevPathnameForNewChatRef.current
+    prevPathnameForNewChatRef.current = pathname
+    if (prev != null && /^\/chatbot\/\d+$/.test(prev) && pathname === "/chatbot") {
+      if (isTurnInFlightRef.current || submittingRef.current) return
+      setCurrentChatId(null)
+      setBackendChatId(null)
+      setMessages([])
+      setHasStarted(false)
+      setInputValue("")
+      setFeedbackByMessage({})
+      setQueuePosition(0)
+      console.log("[Clairvyn] route /chatbot/:id → /chatbot — fresh conversation")
+    }
+  }, [pathname, user?.uid, authLoading])
 
   // Keep the address bar on the canonical path when viewing a persisted server chat.
   useEffect(() => {
@@ -763,10 +845,12 @@ export default function ChatbotClient() {
       setPlaceholderText("What are you thinking?..")
     }
 
-    // Try the scripted demo first — if handled, skip backend call
-    const handled = handleScriptedInput(normalized, { addMessage, setTyping })
-    if (handled) {
-      return // DO NOT call backend — scripted demo handled it
+    // Optional local scripted mode (off by default for deployment reliability/persistence).
+    if (allowLocalScriptedReplies) {
+      const handled = handleScriptedInput(normalized, { addMessage, setTyping })
+      if (handled) {
+        return
+      }
     }
 
     // Unpaid signed-in users: enforce per-user floor plan limit (3 free generations).
@@ -893,12 +977,9 @@ export default function ChatbotClient() {
           }
           if (pollData.status === "FAILURE") {
             setQueuePosition(0);
-            const errMsg =
-              pollData.result?.error ||
-              pollData.error ||
-              (typeof pollData.result === "string" ? pollData.result : null) ||
-              "Floor plan generation failed.";
-            throw new Error(errMsg);
+            // Backend now persists assistant error rows on task failure and returns history.
+            finalData = pollData;
+            break;
           }
           if (poll < MAX_POLLS) {
             await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -932,6 +1013,34 @@ export default function ChatbotClient() {
 
       // Defensive: older bug marked failed generations as SUCCESS with only the user message in history.
       const asyncTurn = Boolean(data.task_id && !data.history);
+      if (asyncTurn && updatedHistory.length === 0) {
+        const nowIso = new Date().toISOString()
+        const carry =
+          messagesRef.current.length > 0
+            ? messagesRef.current.map((m) => ({
+                ...m,
+                timestamp:
+                  typeof m.timestamp === "string"
+                    ? m.timestamp
+                    : (m.timestamp as Date)?.toISOString?.() ?? nowIso,
+              }))
+            : [{
+                id: `user-fallback-${Date.now()}`,
+                role: "user" as const,
+                content: userText,
+                timestamp: nowIso,
+              }]
+        updatedHistory.push(
+          ...carry,
+          {
+            id: `assistant-fallback-empty-${Date.now()}`,
+            role: "assistant",
+            content:
+              "Generation finished but the server returned no message history. I preserved your visible chat. Please retry once; if this repeats, backend task persistence is failing.",
+            timestamp: nowIso,
+          }
+        )
+      }
       if (
         asyncTurn &&
         updatedHistory.length > 0 &&
@@ -1022,6 +1131,27 @@ export default function ChatbotClient() {
         }
         return next
       })
+      // Best-effort backend persistence for assistant error rows.
+      try {
+        const token = await getIdToken()
+        const resolvedBackendChatId =
+          isBackendNumericChatId(backendChatId) ? backendChatId :
+          isBackendNumericChatId(activeChatId) ? activeChatId :
+          null
+        if (token && resolvedBackendChatId) {
+          await apiFetch(apiPath.chatMessages(resolvedBackendChatId), {
+            method: "POST",
+            token: token ?? null,
+            body: {
+              sender_type: "assistant",
+              content,
+              extra_data: { error: true, source: "frontend_catch" },
+            },
+          })
+        }
+      } catch (persistErr) {
+        console.warn("[Clairvyn] failed to persist assistant error to backend", persistErr)
+      }
     } finally {
       submittingRef.current = false
       setIsTurnInFlight(false)
@@ -1336,7 +1466,7 @@ export default function ChatbotClient() {
             {profileImageUrl ? (
               <AvatarImage
                 src={profileImageUrl}
-                alt={user?.displayName || "User profile"}
+                alt={resolvedDisplayName || "User profile"}
                 referrerPolicy="no-referrer"
                 onError={() => setProfileImageUrl(null)}
               />
@@ -1347,7 +1477,7 @@ export default function ChatbotClient() {
           </Avatar>
           <div className="min-w-0">
             <p className="font-semibold text-gray-900 dark:text-[#F0EBE0] text-sm truncate">
-              {user ? (user.displayName || user.email) : "Guest User"}
+              {user ? (resolvedDisplayName || user.email) : "Guest User"}
             </p>
             <p className="text-xs text-gray-500 dark:text-[#6B6458]">
               {user ? "Signed in" : "Guest Mode"}
@@ -1633,7 +1763,7 @@ export default function ChatbotClient() {
             transition={{ duration: 0.4 }}
           >
             <GreetingMessage
-              firstName={user?.displayName?.split(" ")[0] ?? undefined}
+              firstName={resolvedDisplayName.split(" ")[0] || undefined}
               as="h2"
             />
             <motion.div
@@ -2005,6 +2135,7 @@ export default function ChatbotClient() {
         onClose={() => setIsProfileModalOpen(false)}
         onLogout={handleLogout}
         profileImageUrl={profileImageUrl}
+        onProfileSaved={(displayName) => setProfileDisplayName(displayName)}
       />
 
       {/* AI Disclaimer Modal */}

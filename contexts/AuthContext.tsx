@@ -15,6 +15,7 @@ import {
   browserSessionPersistence,
   fetchSignInMethodsForEmail,
   linkWithCredential,
+  linkWithPopup,
   EmailAuthProvider,
   OAuthProvider,
 } from "firebase/auth"
@@ -37,11 +38,44 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const LOCAL_DEV_BYPASS_TOKEN = "local-dev-token"
+
+function isLocalhostHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [isGuest, setIsGuest] = useState(false)
+  const [localDevBypassEnabled, setLocalDevBypassEnabled] = useState(false)
+
+  const localDevEmail =
+    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_EMAIL) || ""
+
+  const makeLocalDevUser = useCallback((): FirebaseUser => {
+    const email = localDevEmail.trim() || "ronakmm2005@gmail.com"
+    const name = email.split("@")[0] || "Local Dev User"
+    const now = Date.now()
+    const mock = {
+      uid: `local-dev:${email}`,
+      email,
+      displayName: name,
+      photoURL: null,
+      isAnonymous: false,
+      getIdToken: async () => LOCAL_DEV_BYPASS_TOKEN,
+      getIdTokenResult: async () =>
+        ({
+          token: LOCAL_DEV_BYPASS_TOKEN,
+          expirationTime: new Date(now + 60 * 60 * 1000).toISOString(),
+          authTime: new Date(now).toISOString(),
+          issuedAtTime: new Date(now).toISOString(),
+          signInProvider: "custom",
+          claims: { email, name, dev_bypass: true },
+        } as any),
+    }
+    return mock as unknown as FirebaseUser
+  }, [localDevEmail])
 
   const applyAuthPersistence = async (rememberMe: boolean) => {
     if (!auth) return
@@ -49,6 +83,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    const shouldBypass =
+      typeof window !== "undefined" &&
+      Boolean(localDevEmail.trim()) &&
+      isLocalhostHost(window.location.hostname)
+    setLocalDevBypassEnabled(shouldBypass)
+
+    if (shouldBypass) {
+      // Local-only bypass to keep dev moving when Firebase auth isn't available on this machine.
+      setUser(makeLocalDevUser())
+      setIsGuest(false)
+      setLoading(false)
+      return
+    }
+
     if (!auth) {
       console.warn("[Clairvyn] Firebase is not configured (missing NEXT_PUBLIC_FIREBASE_*).")
       setLoading(false)
@@ -79,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(loadingTimeout)
       unsubscribe()
     }
-  }, [])
+  }, [localDevEmail, makeLocalDevUser])
 
   const enterGuestMode = () => {
     if (typeof window !== "undefined") {
@@ -106,6 +154,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signIn = async (email: string, password: string, rememberMe = true) => {
+    if (localDevBypassEnabled) {
+      setUser(makeLocalDevUser())
+      await migrateGuestChats()
+      return
+    }
     if (!auth) throw new Error("Firebase Auth is not configured")
     await applyAuthPersistence(rememberMe)
     await signInWithEmailAndPassword(auth, email, password)
@@ -113,6 +166,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signUp = async (email: string, password: string) => {
+    if (localDevBypassEnabled) {
+      setUser(makeLocalDevUser())
+      await migrateGuestChats()
+      return
+    }
     if (!auth) throw new Error("Firebase Auth is not configured")
     await createUserWithEmailAndPassword(auth, email, password)
     await migrateGuestChats()
@@ -120,6 +178,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signInWithGoogle = async (options?: { rememberMe?: boolean }) => {
+    if (localDevBypassEnabled) {
+      setUser(makeLocalDevUser())
+      await migrateGuestChats()
+      return
+    }
     if (!auth) throw new Error("Firebase Auth is not configured")
     await applyAuthPersistence(options?.rememberMe ?? true)
     const provider = new GoogleAuthProvider()
@@ -130,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     try {
       if (auth.currentUser && !auth.currentUser.isAnonymous) {
-        const result = await (auth.currentUser as any).linkWithPopup(provider)
+        const result = await linkWithPopup(auth.currentUser, provider)
         await updateUserProfileFromGoogle(result.user)
         console.log("Google provider linked to existing account")
       } else {
@@ -206,6 +269,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signInWithGithub = async (options?: { rememberMe?: boolean }) => {
+    if (localDevBypassEnabled) {
+      setUser(makeLocalDevUser())
+      await migrateGuestChats()
+      return
+    }
     if (!auth) throw new Error("Firebase Auth is not configured")
     await applyAuthPersistence(options?.rememberMe ?? true)
     const provider = new GithubAuthProvider()
@@ -226,6 +294,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     
+    if (localDevBypassEnabled) {
+      setUser(makeLocalDevUser())
+      setIsGuest(false)
+      return
+    }
     if (auth) {
       await signOut(auth)
     }
@@ -236,6 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const getIdToken = useCallback(
     async (forceRefresh = false): Promise<string | null> => {
+      if (localDevBypassEnabled) return LOCAL_DEV_BYPASS_TOKEN
       if (!auth) return null
       if (!auth.currentUser) return null
       try {
@@ -245,7 +319,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null
       }
     },
-    []
+    [localDevBypassEnabled]
   )
 
   const value = {

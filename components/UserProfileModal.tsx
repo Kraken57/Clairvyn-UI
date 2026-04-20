@@ -15,6 +15,7 @@ interface UserProfileModalProps {
   onClose: () => void
   onLogout: () => void
   profileImageUrl: string | null
+  onProfileSaved?: (displayName: string) => void
 }
 
 interface UserProfile {
@@ -26,7 +27,13 @@ interface UserProfile {
   country?: string
 }
 
-export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }: UserProfileModalProps) {
+export function UserProfileModal({
+  isOpen,
+  onClose,
+  onLogout,
+  profileImageUrl,
+  onProfileSaved,
+}: UserProfileModalProps) {
   const { user, getIdToken } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -85,8 +92,10 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
           const uni = profile.university ?? profile.institution ?? ""
           const ctry = profile.country ?? ""
           const photo = data.photo_url ?? profile.photoURL ?? ""
+          const displayName = data.display_name ?? user.displayName ?? ""
           setFormData((prev) => ({
             ...prev,
+            displayName: displayName || prev.displayName,
             university: uni || prev.university,
             country: ctry || prev.country,
             photoURL: photo || prev.photoURL,
@@ -168,13 +177,25 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
           })
 
           if (!response.ok) {
-            throw new Error("Failed to upload photo")
+            let detail = ""
+            try {
+              const err = await response.json()
+              detail = typeof err?.error === "string" ? err.error : ""
+            } catch {
+              /* ignore non-JSON bodies */
+            }
+            if (!detail) detail = `HTTP ${response.status}`
+            throw new Error(detail)
           }
 
           setSuccess("Photo updated!")
           setTimeout(() => setSuccess(""), 2000)
-        } catch (err) {
-          setError("Photo saved locally but couldn't sync to server.")
+        } catch (err: any) {
+          const detail =
+            typeof err?.message === "string" && err.message.trim().length > 0
+              ? err.message.trim()
+              : "Unknown server error"
+          setError(`Photo saved locally but couldn't sync to server: ${detail}`)
           setTimeout(() => setError(""), 3000)
         } finally {
           setIsLoading(false)
@@ -219,6 +240,7 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
           "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
+          display_name: formData.displayName,
           university: formData.university,
           country: formData.country,
         }),
@@ -227,15 +249,26 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
       lsSet("university", formData.university ?? "")
       lsSet("country", formData.country ?? "")
 
+      const savedPayload = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error("Failed to update profile")
       }
+      const savedDisplayName =
+        typeof savedPayload?.display_name === "string" && savedPayload.display_name.trim().length > 0
+          ? savedPayload.display_name.trim()
+          : formData.displayName.trim()
 
-      // Update Firebase displayName
+      // Keep auth profile aligned so name updates are visible immediately in header/sidebar.
       if (user && formData.displayName !== user.displayName) {
-        const { updateProfile } = await import("firebase/auth")
-        await updateProfile(user, { displayName: formData.displayName })
+        try {
+          const { updateProfile } = await import("firebase/auth")
+          await updateProfile(user, { displayName: formData.displayName })
+        } catch {
+          // Local dev bypass/mock user path: backend remains source of truth.
+        }
       }
+      onProfileSaved?.(savedDisplayName)
+      setFormData((prev) => ({ ...prev, displayName: savedDisplayName }))
 
       setSuccess("Profile saved!")
       setTimeout(() => {
@@ -374,21 +407,15 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
                 <label className="block text-sm font-semibold text-gray-700 dark:text-[#F0EBE0] mb-2">
                   Full Name
                 </label>
-                {user?.displayName ? (
-                  <div className="w-full px-4 py-2.5 rounded-[10px] bg-gray-100 dark:bg-[#2C2A27] border border-gray-300 dark:border-[rgba(255,255,255,0.09)] text-gray-500 dark:text-[#A8A090] text-sm font-medium">
-                    {user.displayName}
-                  </div>
-                ) : (
-                  <Input
-                    name="displayName"
-                    type="text"
-                    value={formData.displayName}
-                    onChange={handleInputChange}
-                    disabled={isLoading}
-                    placeholder="Your name"
-                    className="w-full bg-gray-50 dark:bg-[#2C2A27] border-gray-300 dark:border-[rgba(255,255,255,0.09)] dark:focus:border-[rgba(155,127,212,0.45)] text-gray-900 dark:text-[#F0EBE0] rounded-[10px] py-2.5"
-                  />
-                )}
+                <Input
+                  name="displayName"
+                  type="text"
+                  value={formData.displayName}
+                  onChange={handleInputChange}
+                  disabled={isLoading}
+                  placeholder="Your name"
+                  className="w-full bg-gray-50 dark:bg-[#2C2A27] border-gray-300 dark:border-[rgba(255,255,255,0.09)] dark:focus:border-[rgba(155,127,212,0.45)] text-gray-900 dark:text-[#F0EBE0] rounded-[10px] py-2.5"
+                />
               </div>
 
               {/* University Field */}

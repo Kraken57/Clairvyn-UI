@@ -11,7 +11,7 @@ export function handleScriptedInput(
     setTimeout(() => {
       addMessage({
         id: Date.now(),
-        type: 'assistant',
+        role: 'assistant',
         content: "Here's a demo of how I can help you with architectural design! Try asking me to create a floor plan for a small apartment or help you with CAD modeling.",
         timestamp: new Date().toISOString()
       });
@@ -26,7 +26,7 @@ export function handleScriptedInput(
     setTimeout(() => {
       addMessage({
         id: Date.now(),
-        type: 'assistant',
+        role: 'assistant',
         content: "I can help you with:\n• Floor plan design and layout\n• CAD modeling assistance\n• Architectural drawings\n• Building specifications\n• Design feedback and suggestions\n\nJust describe what you need and I'll assist you!",
         timestamp: new Date().toISOString()
       });
@@ -41,7 +41,7 @@ export function handleScriptedInput(
     setTimeout(() => {
       addMessage({
         id: Date.now(),
-        type: 'assistant',
+        role: 'assistant',
         content: "Clairvyn 1.0 is a pilot floor plan generator that allows you to design up to 4 BHK residential layouts. You can customise dimensions, furniture placements, and export the output in DXF or PNG formats based on your requirements.\n\nFor example, simply enter a prompt such as: \"Design a 3 BHK apartment with a study and garage, with a total area of 300 sq. meters\"",
         timestamp: new Date().toISOString()
       });
