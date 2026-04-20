@@ -89,16 +89,6 @@ const ASSISTANT_STATUS_PHASES: readonly (readonly string[])[] = [
 /** Phase boundaries (ms from start): start 0–2m, then mid, detail, final until done. */
 const ASSISTANT_PHASE_END_MS = [120_000, 300_000, 420_000] as const
 
-/** True if server history already includes an assistant row (async /turn may send `history: []`). */
-function historyHasAssistantPayload(history: unknown): boolean {
-  if (!Array.isArray(history) || history.length === 0) return false
-  return history.some((m: any) => {
-    const st = m?.sender_type
-    const s = typeof st === "string" ? st : st?.value
-    return s === "assistant"
-  })
-}
-
 function clipErrorMessage(s: string, maxLen = 1200): string {
   const t = s.trim()
   if (!t) return ""
@@ -430,6 +420,13 @@ export default function ChatbotClient() {
   const [feedbackSubmittingByMessage, setFeedbackSubmittingByMessage] = useState<Record<string, boolean>>({})
   const [waitlistOpen, setWaitlistOpen] = useState(false)
   const resolvedDisplayName = (profileDisplayName || user?.displayName || "").trim()
+  const inferredPendingAssistant =
+    !isLoading &&
+    hasStarted &&
+    messages.length > 0 &&
+    messages[messages.length - 1]?.role === "user" &&
+    !messages.some((m) => m.role === "assistant")
+  const showAssistantLoader = isLoading || inferredPendingAssistant
 
   // Chat history state (integrated into sidebar)
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
@@ -965,9 +962,7 @@ export default function ChatbotClient() {
       if (data.queue_position != null && data.queue_position > 0) {
         setQueuePosition(data.queue_position)
       }
-      // Poll when a background task exists but we do not yet have an assistant message.
-      // Note: `history: []` is truthy — `!data.history` would incorrectly skip polling.
-      if (data.task_id && !historyHasAssistantPayload(data.history)) {
+      if (data.task_id && !data.history) {
         const resolvedChatId = data.chat_id ?? chatId;
         const taskId = data.task_id;
         // Floor-plan jobs often need 5–10+ minutes; cap total wait ~18 minutes.
@@ -997,13 +992,10 @@ export default function ChatbotClient() {
             await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
           }
         }
-        if (lastPoll) {
-          finalData = lastPoll;
-        } else if ((finalData as any)?.status === "FAILURE") {
-          // keep FAILURE payload from loop
-        } else {
+        if (!lastPoll) {
           throw new Error("Floor plan generation timed out. Please try again.");
         }
+        finalData = lastPoll;
       }
 
       // Replace messages with server history
@@ -1027,7 +1019,7 @@ export default function ChatbotClient() {
       }));
 
       // Defensive: older bug marked failed generations as SUCCESS with only the user message in history.
-      const asyncTurn = Boolean(data.task_id && !historyHasAssistantPayload(data.history));
+      const asyncTurn = Boolean(data.task_id && !data.history);
       if (asyncTurn && updatedHistory.length === 0) {
         const nowIso = new Date().toISOString()
         const carry =
@@ -2021,8 +2013,8 @@ export default function ChatbotClient() {
 
 
 
-            {/* Loading indicator */}
-            {isLoading && (
+            {/* Loading indicator (also shown after refresh if user message exists but assistant reply is still pending). */}
+            {showAssistantLoader && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2054,7 +2046,7 @@ export default function ChatbotClient() {
 
                     <AnimatePresence mode="wait">
                       <motion.span
-                        key={queuePosition > 0 ? `queue-${queuePosition}` : assistantStatusLine}
+                        key={queuePosition > 0 ? `queue-${queuePosition}` : (isLoading ? assistantStatusLine : "inferred-pending")}
                         initial={{ opacity: 0, x: -8 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 8 }}
@@ -2063,7 +2055,9 @@ export default function ChatbotClient() {
                       >
                         {queuePosition > 0
                           ? `Many users are generating right now — you're #${queuePosition} in line. Your floor plan will be ready in a few minutes, even if you close this tab.`
-                          : assistantStatusLine}
+                          : isLoading
+                            ? assistantStatusLine
+                            : "Interpreting your requirements..."}
                       </motion.span>
                     </AnimatePresence>
                   </div>
