@@ -31,6 +31,10 @@ function resolveBackendOrigin(): string {
  */
 function effectiveApiBase(): string {
   if (typeof window !== "undefined") {
+    const configured = resolveBackendOrigin()
+    if (/^https?:\/\//i.test(configured)) {
+      return configured
+    }
     return ""
   }
   return resolveBackendOrigin()
