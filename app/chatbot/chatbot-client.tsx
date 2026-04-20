@@ -1240,8 +1240,9 @@ export default function ChatbotClient() {
         (error as any)?.code === "ECONNRESET" ||
         raw.includes("Failed to fetch")
       ) {
-        content =
-          "Unable to reach the AI backend. Start Flask on the port in frontend/.env.local (BACKEND_PORT / NEXT_PUBLIC_API_BASE_URL), e.g. http://127.0.0.1:5002."
+        content = process.env.NODE_ENV === "development"
+          ? "Unable to reach the AI backend. Check NEXT_PUBLIC_API_BASE_URL and your local backend service."
+          : "Unable to reach the AI backend right now. Please try again in a moment."
       } else if (raw.startsWith("API ")) {
         // apiFetch: `API 500: {"error":"..."}`
         const brace = raw.indexOf("{")

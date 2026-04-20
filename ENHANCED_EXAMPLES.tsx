@@ -7,6 +7,7 @@ import { FeedbackWidget } from "@/components/FeedbackWidget"
 import { initializePerformanceMonitoring } from "@/lib/performanceMonitoring"
 import { analytics } from "@/lib/analytics"
 import { usePageTransition, useAnalytics } from "@/hooks/useFeatures"
+import { getBackendUrl } from "@/lib/backendApi"
 
 /**
  * Enhanced Root Layout Example
@@ -44,7 +45,7 @@ export function EnhancedRootLayout({
       })
 
       // Send to backend
-      const response = await fetch("/api/feedback", {
+      const response = await fetch(getBackendUrl("/api/feedback"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(feedback),

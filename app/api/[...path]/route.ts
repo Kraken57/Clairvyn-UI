@@ -5,18 +5,12 @@ export const dynamic = "force-dynamic"
 
 /**
  * Upstream Flask for this proxy only.
- * Do NOT use NEXT_PUBLIC_API_BASE_URL here — it is often set to a public ngrok URL for demos while `next dev`
- * runs locally; the proxy must hit the Flask process on this machine (or CLAIRVYN_FLASK_INTERNAL_URL).
+ * Uses NEXT_PUBLIC_API_BASE_URL only (no localhost fallback).
  */
 function upstreamOrigin(): string {
-  const internal =
-    (typeof process !== "undefined" && process.env.CLAIRVYN_FLASK_INTERNAL_URL) ||
-    process.env.BACKEND_INTERNAL_URL ||
-    ""
-  const s = String(internal).trim()
-  if (s) return s.replace(/\/$/, "")
-  const port = process.env.BACKEND_PORT || "5000"
-  return `http://127.0.0.1:${port}`
+  const s = String((typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) || "").trim()
+  if (/^https?:\/\//i.test(s)) return s.replace(/\/$/, "")
+  return ""
 }
 
 const HOP_BY_HOP = new Set([
@@ -32,6 +26,12 @@ const HOP_BY_HOP = new Set([
 
 async function proxy(request: NextRequest): Promise<Response> {
   const base = upstreamOrigin()
+  if (!base) {
+    return NextResponse.json(
+      { error: "API upstream is not configured. Set NEXT_PUBLIC_API_BASE_URL to https://api.clairvyn.com." },
+      { status: 500 }
+    )
+  }
   const pathAndQuery = request.nextUrl.pathname + request.nextUrl.search
   const target = new URL(pathAndQuery, `${base}/`)
 

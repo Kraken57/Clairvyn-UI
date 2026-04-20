@@ -1,43 +1,26 @@
 import { apiPath } from "./apiRoutes"
 
-/** Local Flask default (BACKEND_PORT when ghost listeners block :5000). */
-function defaultBackendOrigin(): string {
-  const p =
-    (typeof process !== "undefined" &&
-      (process.env.BACKEND_PORT || process.env.NEXT_PUBLIC_BACKEND_PORT || "").trim()) ||
-    "5000"
-  return `http://127.0.0.1:${p || "5000"}`
-}
-
-/** Resolve backend origin. Must be absolute (http/https) — relative bases break auth headers via Next.js routing. */
+/** Resolve backend origin from NEXT_PUBLIC_API_BASE_URL only. */
 function resolveBackendOrigin(): string {
   const raw = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) || ""
   const s = String(raw).trim()
-  if (!s || s === "/") {
-    return defaultBackendOrigin()
-  }
-  // Relative URL (e.g. "/" or "/proxy") would hit the Next.js origin and skip sending Flask-only headers reliably.
-  if (s.startsWith("/") && !s.startsWith("//")) {
-    return defaultBackendOrigin()
-  }
+  if (!s || s === "/") return ""
+  if (!/^https?:\/\//i.test(s)) return ""
   return s.replace(/\/$/, "")
 }
 
 /**
  * Effective origin for API calls.
- * - **Browser**: same origin (`""` → paths like `/api/chats`) so requests hit Next.js `app/api/[...path]/route.ts`,
- *   which proxies to Flask with headers preserved (no manual `NEXT_PUBLIC_API_BASE_URL` needed for local dev).
- * - **Server (SSR / Node)**: direct URL to Flask via `resolveBackendOrigin()` (env or `http://127.0.0.1:5000`).
+ * - Browser + Server: always use NEXT_PUBLIC_API_BASE_URL.
  */
 function effectiveApiBase(): string {
-  if (typeof window !== "undefined") {
-    const configured = resolveBackendOrigin()
-    if (/^https?:\/\//i.test(configured)) {
-      return configured
-    }
-    return ""
-  }
   return resolveBackendOrigin()
+}
+
+function requireApiBase(): string {
+  const base = effectiveApiBase()
+  if (base) return base
+  throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured with an absolute https:// API origin.")
 }
 
 /** Base URL of the Flask backend (same as env after same-origin guard in the browser). */
@@ -65,7 +48,7 @@ export function apiAuthHeaders(token: string | null | undefined): Record<string,
 
 /** Return full URL for a path (e.g. for images or logout that need the backend origin). */
 export function getBackendUrl(path: string): string {
-  const base = effectiveApiBase().replace(/\/$/, "")
+  const base = requireApiBase().replace(/\/$/, "")
   let p = path.startsWith("/") ? path : `/${path}`
   // Avoid accidental double slashes if path is malformed (e.g. "//api/...")
   if (p.startsWith("//")) {
@@ -206,7 +189,7 @@ export async function apiFetch<TResponse, TBody = unknown>(
     let hint = ""
     if (response.status === 404 && /<!doctype html>/i.test(text)) {
       hint =
-        " Received Next.js HTML instead of JSON — start Flask on port 5000 (or set NEXT_PUBLIC_API_BASE_URL for the server proxy). Wrong chat id can also 404."
+        " Received HTML instead of API JSON. Verify NEXT_PUBLIC_API_BASE_URL points to the backend API origin."
     }
     throw new Error(`API ${response.status}: ${text || response.statusText}${hint}`)
   }
