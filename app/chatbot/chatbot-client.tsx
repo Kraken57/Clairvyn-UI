@@ -968,7 +968,7 @@ export default function ChatbotClient() {
         // Floor-plan jobs often need 5–10+ minutes; cap total wait ~18 minutes.
         const POLL_INTERVAL_MS = 5_000;
         const MAX_POLLS = 220;
-        let lastPoll: any = null;
+        let terminalPoll: any = null;
         for (let poll = 1; poll <= MAX_POLLS; poll++) {
           const pollData = await apiFetch<any>(
             apiPath.chatTask(resolvedChatId, taskId),
@@ -979,23 +979,43 @@ export default function ChatbotClient() {
           }
           if (pollData.status === "SUCCESS") {
             setQueuePosition(0);
-            lastPoll = pollData;
+            terminalPoll = pollData;
             break;
           }
           if (pollData.status === "FAILURE") {
             setQueuePosition(0);
             // Backend now persists assistant error rows on task failure and returns history.
-            finalData = pollData;
+            terminalPoll = pollData;
             break;
           }
           if (poll < MAX_POLLS) {
             await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
           }
         }
-        if (!lastPoll) {
-          throw new Error("Floor plan generation timed out. Please try again.");
+        if (!terminalPoll) {
+          // Timeout fallback: pull latest persisted history so users see backend-persisted errors/results.
+          let timeoutHistory: any[] = []
+          try {
+            const histData = await apiFetch<any>(apiPath.chatMessages(String(resolvedChatId)), {
+              method: "GET",
+              token: token ?? null,
+            })
+            timeoutHistory = Array.isArray(histData?.history)
+              ? histData.history
+              : Array.isArray(histData?.messages)
+                ? histData.messages
+                : []
+          } catch {
+            // keep empty fallback
+          }
+          finalData = {
+            status: "FAILURE",
+            error: "Floor plan generation timed out. Please try again.",
+            history: timeoutHistory,
+          }
+        } else {
+          finalData = terminalPoll;
         }
-        finalData = lastPoll;
       }
 
       // Replace messages with server history
