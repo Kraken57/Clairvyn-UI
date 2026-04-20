@@ -88,6 +88,30 @@ const ASSISTANT_STATUS_PHASES: readonly (readonly string[])[] = [
 
 /** Phase boundaries (ms from start): start 0–2m, then mid, detail, final until done. */
 const ASSISTANT_PHASE_END_MS = [120_000, 300_000, 420_000] as const
+const CLAIRVYN_HELP_REPLY =
+  "I can help with floor-plan generation and edits (for example: 'design a 3BHK', 'make the kitchen larger', 'move the sofa'). For non-floorplan questions, please ask in the context of a floor plan and I will guide you."
+
+function isLikelyFloorplanPrompt(text: string): boolean {
+  const t = text.toLowerCase()
+  const patterns = [
+    /\b(\d+\s*bhk|bhk)\b/,
+    /\bfloor[\s-]?plan\b/,
+    /\blayout\b/,
+    /\b(room|bedroom|kitchen|bathroom|balcony|corridor|stair|parking)\b/,
+    /\b(plot|sq\.?\s*ft|square\s*feet|dimensions?|area)\b/,
+    /\b(dxf|png|cad)\b/,
+    /\b(design|generate|modify|move|add|remove|resize)\b/,
+  ]
+  return patterns.some((p) => p.test(t))
+}
+
+function shouldInstantlyExplainClairvyn(text: string): boolean {
+  const t = text.trim().toLowerCase()
+  if (!t) return false
+  if (isLikelyFloorplanPrompt(t)) return false
+  if (t.length <= 120) return true
+  return /^(hi|hello|hey|yo|help|what can you do|who are you|thanks|thank you)\b/.test(t)
+}
 
 function clipErrorMessage(s: string, maxLen = 1200): string {
   const t = s.trim()
@@ -911,6 +935,98 @@ export default function ChatbotClient() {
       if (!chatId) {
         console.error("[Clairvyn] handleSubmit: no backend chat id");
         throw new Error('Could not create or retrieve backend chat')
+      }
+      // Fast-path for non-floorplan prompts: show immediate product guidance instead of queuing long generation.
+      if (shouldInstantlyExplainClairvyn(userText)) {
+        const nowIso = new Date().toISOString()
+        let resolvedNumericChatId: string | null =
+          isBackendNumericChatId(String(chatId)) ? String(chatId) : null
+        if (!resolvedNumericChatId && token) {
+          try {
+            const created = await apiFetch<any>(apiPath.chats(), {
+              method: "POST",
+              token: token ?? null,
+              body: { title: userText.slice(0, 80), metadata: { started: false } },
+            })
+            if (created?.id != null) {
+              resolvedNumericChatId = String(created.id)
+              setBackendChatId(resolvedNumericChatId)
+              if (activeChatId && activeChatId !== resolvedNumericChatId && user) {
+                await renameChatSession(user.uid, activeChatId, resolvedNumericChatId)
+                setCurrentChatId(resolvedNumericChatId)
+                setLastActiveChatId(user.uid, resolvedNumericChatId)
+                activeChatId = resolvedNumericChatId
+              }
+            }
+          } catch (e) {
+            console.warn("[Clairvyn] immediate help: failed to create backend chat", e)
+          }
+        }
+        if (token && resolvedNumericChatId) {
+          try {
+            await apiFetch(apiPath.chatMessages(resolvedNumericChatId), {
+              method: "POST",
+              token: token ?? null,
+              body: {
+                sender_type: "user",
+                content: userText,
+              },
+            })
+            await apiFetch(apiPath.chatMessages(resolvedNumericChatId), {
+              method: "POST",
+              token: token ?? null,
+              body: {
+                sender_type: "assistant",
+                content: CLAIRVYN_HELP_REPLY,
+                extra_data: { informational: true, source: "frontend_instant_help" },
+              },
+            })
+            const persisted = await apiFetch<any>(apiPath.chatMessages(resolvedNumericChatId), {
+              method: "GET",
+              token: token ?? null,
+            })
+            const persistedHistory: ChatMessage[] = (
+              Array.isArray(persisted?.history)
+                ? persisted.history
+                : Array.isArray(persisted?.messages)
+                  ? persisted.messages
+                  : []
+            ).map((m: any) => ({
+              id: m.id,
+              role: m.sender_type === "user" ? "user" : "assistant",
+              content: m.content ?? "",
+              timestamp:
+                typeof m.created_at === "string"
+                  ? m.created_at
+                  : (m.created_at as Date)?.toISOString?.() ?? nowIso,
+              image_url: m.image_url ?? undefined,
+              extra_data: m.extra_data ?? undefined,
+            }))
+            if (activeChatId && user) {
+              await setChatMessages(user.uid, activeChatId, persistedHistory)
+            }
+            setMessages(persistedHistory)
+          } catch (e) {
+            console.warn("[Clairvyn] immediate help: backend persistence failed", e)
+            const localReply: ChatMessage = {
+              role: "assistant",
+              content: CLAIRVYN_HELP_REPLY,
+              timestamp: nowIso,
+              extra_data: { informational: true, source: "frontend_instant_help_local" } as any,
+            }
+            setMessages((prev) => [...prev, localReply])
+          }
+        } else {
+          const localReply: ChatMessage = {
+            role: "assistant",
+            content: CLAIRVYN_HELP_REPLY,
+            timestamp: nowIso,
+            extra_data: { informational: true, source: "frontend_instant_help_local" } as any,
+          }
+          setMessages((prev) => [...prev, localReply])
+        }
+        await refreshChatSessions()
+        return
       }
       console.log("[Clairvyn] handleSubmit: sending turn", { chatId, contentLength: userText.length });
 
