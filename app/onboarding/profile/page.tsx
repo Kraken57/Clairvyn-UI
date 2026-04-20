@@ -60,8 +60,18 @@ export default function OnboardingProfilePage() {
       const profile = await fetchMeProfile(token)
       if (cancelled) return
       if (profile === undefined) {
-        // Backend reachability is unknown — don't trap users on onboarding.
-        router.replace("/chatbot")
+        // Backend reachability is unknown. Keep user on onboarding to avoid
+        // chatbot<->onboarding redirect loops for new users.
+        const done =
+          typeof window !== "undefined" &&
+          !!user?.uid &&
+          localStorage.getItem(onboardingDoneStorageKey(user.uid)) === "1"
+        if (done) {
+          router.replace("/chatbot")
+          return
+        }
+        setGateOk(true)
+        setError("Unable to verify profile right now. Please complete onboarding and continue.")
         return
       }
       if (!profileCountryMissing(profile)) {
@@ -135,14 +145,7 @@ export default function OnboardingProfilePage() {
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Something went wrong."
         if (/load failed|failed to fetch/i.test(message)) {
-          // Don't hard-block users when network is flaky.
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem(ONBOARDING_SESSION_KEY, "1")
-            if (user?.uid) {
-              localStorage.setItem(onboardingDoneStorageKey(user.uid), "1")
-            }
-          }
-          router.replace("/chatbot")
+          setError("Unable to reach the server right now. Please try again in a moment.")
         } else {
           setError(message)
         }
