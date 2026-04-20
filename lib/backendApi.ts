@@ -102,6 +102,17 @@ function postBridgeClientEvent(payload: Record<string, unknown>): void {
   }
 }
 
+function makeRequestId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID()
+    }
+  } catch {
+    // ignore and fallback
+  }
+  return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
 interface ApiFetchOptions<TBody> {
@@ -119,12 +130,14 @@ export async function apiFetch<TResponse, TBody = unknown>(
 ): Promise<TResponse> {
   const url = getBackendUrl(path)
   const t0 = typeof performance !== "undefined" ? performance.now() : 0
+  const requestId = makeRequestId()
 
   if (DEBUG) {
     console.log("[Clairvyn:api] Request", {
       method,
       path,
       url,
+      requestId,
       hasToken: !!token,
       body: body !== undefined ? (typeof body === "object" && body !== null ? { ...(body as object) } : body) : undefined,
     })
@@ -136,6 +149,7 @@ export async function apiFetch<TResponse, TBody = unknown>(
   if (bearer) {
     headers["Authorization"] = `Bearer ${bearer}`
   }
+  headers["X-Request-Id"] = requestId
 
   if (body !== undefined) {
     headers["Content-Type"] = "application/json"
@@ -156,6 +170,7 @@ export async function apiFetch<TResponse, TBody = unknown>(
       path,
       url,
       method,
+      requestId,
       ok: false,
       networkError: String((e as Error)?.message ?? e),
       ms,
@@ -169,6 +184,7 @@ export async function apiFetch<TResponse, TBody = unknown>(
     path,
     url,
     method,
+    requestId,
     ok: response.ok,
     status: response.status,
     ms,
@@ -177,6 +193,7 @@ export async function apiFetch<TResponse, TBody = unknown>(
   if (DEBUG) {
     console.log("[Clairvyn:api] Response", {
       path,
+      requestId,
       status: response.status,
       statusText: response.statusText,
       ok: response.ok,
