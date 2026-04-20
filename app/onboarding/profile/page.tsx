@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { apiFetch } from "@/lib/backendApi"
 import { getCountrySelectOptions } from "@/lib/countryOptions"
 import { fetchMeProfile, profileCountryMissing } from "@/lib/meProfile"
-import { ONBOARDING_SESSION_KEY } from "@/lib/onboardingConstants"
+import { ONBOARDING_SESSION_KEY, onboardingDoneStorageKey } from "@/lib/onboardingConstants"
 import LandingPageLoader from "@/components/LandingPageLoader"
 
 import { Button } from "@/components/ui/button"
@@ -50,7 +50,7 @@ export default function OnboardingProfilePage() {
     let cancelled = false
 
     void (async () => {
-      const token = await getIdToken()
+      const token = (await getIdToken()) ?? (await getIdToken(true))
       if (cancelled) return
       if (!token) {
         router.replace("/signin")
@@ -59,7 +59,15 @@ export default function OnboardingProfilePage() {
 
       const profile = await fetchMeProfile(token)
       if (cancelled) return
+      if (profile === undefined) {
+        // Backend reachability is unknown — don't trap users on onboarding.
+        router.replace("/chatbot")
+        return
+      }
       if (!profileCountryMissing(profile)) {
+        if (typeof window !== "undefined" && user?.uid) {
+          localStorage.setItem(onboardingDoneStorageKey(user.uid), "1")
+        }
         router.replace("/chatbot")
         return
       }
@@ -95,7 +103,7 @@ export default function OnboardingProfilePage() {
         return
       }
 
-      const token = await getIdToken()
+      const token = (await getIdToken()) ?? (await getIdToken(true))
       if (!token) {
         setError("Could not verify your session. Try signing in again.")
         return
@@ -119,11 +127,25 @@ export default function OnboardingProfilePage() {
         })
         if (typeof window !== "undefined") {
           sessionStorage.setItem(ONBOARDING_SESSION_KEY, "1")
+          if (user?.uid) {
+            localStorage.setItem(onboardingDoneStorageKey(user.uid), "1")
+          }
         }
         router.replace("/chatbot")
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Something went wrong."
-        setError(message)
+        if (/load failed|failed to fetch/i.test(message)) {
+          // Don't hard-block users when network is flaky.
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem(ONBOARDING_SESSION_KEY, "1")
+            if (user?.uid) {
+              localStorage.setItem(onboardingDoneStorageKey(user.uid), "1")
+            }
+          }
+          router.replace("/chatbot")
+        } else {
+          setError(message)
+        }
       } finally {
         setIsSubmitting(false)
       }

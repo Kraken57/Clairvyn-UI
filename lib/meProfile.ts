@@ -11,11 +11,16 @@ export function profileCountryMissing(profile: MeApiProfile | null | undefined):
   return !profile?.country?.trim()
 }
 
-export async function fetchMeProfile(token: string): Promise<MeApiProfile | null> {
+/**
+ * Returns:
+ * - MeApiProfile|null: backend responded (null means profile missing)
+ * - undefined: backend not reachable / request failed (unknown state)
+ */
+export async function fetchMeProfile(token: string): Promise<MeApiProfile | null | undefined> {
   try {
     const me = await apiFetch<{ profile?: MeApiProfile }>("/api/me", { token })
     return me.profile ?? null
   } catch {
-    return null
+    return undefined
   }
 }
