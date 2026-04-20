@@ -7,7 +7,6 @@ import {
   ONBOARDING_SESSION_KEY,
   onboardingDoneStorageKey,
 } from "@/lib/onboardingConstants"
-import { isInvestorMode } from "@/lib/investorMode"
 
 const LAYOUT_MS = 420
 const START_DELAY_MS = 450
@@ -169,7 +168,6 @@ export function useClairvynOnboarding({
   }, [isDark])
 
   const startTour = useCallback(() => {
-    if (isInvestorMode()) return
     if (typeof window === "undefined" || authLoading) return
 
     clearScheduledTour()
@@ -299,7 +297,6 @@ export function useClairvynOnboarding({
   }, [authLoading, userUid, applyPopoverTheme, setIsSidebarOpen, clearScheduledTour])
 
   useEffect(() => {
-    if (isInvestorMode()) return
     if (authLoading || isGuest) return
     if (!userUid) return
     const show = sessionStorage.getItem(ONBOARDING_SESSION_KEY) === "1"

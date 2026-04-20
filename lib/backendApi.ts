@@ -51,13 +51,12 @@ export function isBackendNumericChatId(id: string | null | undefined): boolean {
 }
 
 /** Headers for raw `fetch()` to the API when not using `apiFetch` (e.g. file downloads, `<img>` blobs). */
-export function investorFetchHeaders(token: string | null | undefined): Record<string, string> {
+export function apiAuthHeaders(token: string | null | undefined): Record<string, string> {
   const t = token != null ? String(token).trim() : ""
   if (t) {
     return { Authorization: `Bearer ${t}` }
   }
-  // No Firebase session: server accepts demo traffic only when it enables CLAIRVYN_ALLOW_INVESTOR_HEADER / DISABLE_API_AUTH.
-  return { "X-Clairvyn-Investor": "1" }
+  return {}
 }
 
 /** Return full URL for a path (e.g. for images or logout that need the backend origin). */
@@ -83,7 +82,7 @@ function postBridgeClientEvent(payload: Record<string, unknown>): void {
     const url = getBackendUrl(apiPath.bridgeLog())
     const h: Record<string, string> = {
       "Content-Type": "application/json",
-      ...investorFetchHeaders(null),
+      ...apiAuthHeaders(null),
     }
     void fetch(url, {
       method: "POST",
@@ -132,8 +131,6 @@ export async function apiFetch<TResponse, TBody = unknown>(
   const bearer = token != null ? String(token).trim() : ""
   if (bearer) {
     headers["Authorization"] = `Bearer ${bearer}`
-  } else {
-    headers["X-Clairvyn-Investor"] = "1"
   }
 
   if (body !== undefined) {

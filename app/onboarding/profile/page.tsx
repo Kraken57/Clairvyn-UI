@@ -11,7 +11,6 @@ import { apiFetch } from "@/lib/backendApi"
 import { getCountrySelectOptions } from "@/lib/countryOptions"
 import { fetchMeProfile, profileCountryMissing } from "@/lib/meProfile"
 import { ONBOARDING_SESSION_KEY } from "@/lib/onboardingConstants"
-import { isInvestorMode } from "@/lib/investorMode"
 import LandingPageLoader from "@/components/LandingPageLoader"
 
 import { Button } from "@/components/ui/button"
@@ -46,11 +45,6 @@ export default function OnboardingProfilePage() {
   const countryOptions = useMemo(() => getCountrySelectOptions(), [])
 
   useEffect(() => {
-    if (isInvestorMode()) router.replace("/chatbot")
-  }, [router])
-
-  useEffect(() => {
-    if (isInvestorMode()) return
     if (authLoading || !user) return
 
     let cancelled = false

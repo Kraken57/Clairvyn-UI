@@ -9,7 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // API traffic: `app/api/[...path]/route.ts` proxies to Flask and forwards headers (incl. X-Clairvyn-Investor).
+  // API traffic: `app/api/[...path]/route.ts` proxies to Flask and forwards Authorization.
 }
 
 export default nextConfig

@@ -22,7 +22,8 @@ interface UserProfile {
   photoURL: string | null
   email?: string
   university?: string
-  location?: string
+  /** Same `profile.country` as onboarding — single source of truth via GET/PATCH /api/me. */
+  country?: string
 }
 
 export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }: UserProfileModalProps) {
@@ -47,7 +48,7 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
     photoURL: user?.photoURL || profileImageUrl,
     email: user?.email || "",
     university: "",
-    location: "",
+    country: "",
   })
 
   // Seed basic fields from Firebase user object
@@ -62,15 +63,13 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
     }
   }, [user, profileImageUrl])
 
-  // Fetch university + location from backend whenever the modal opens;
-  // fall back to localStorage so data survives even if backend doesn't persist it.
+  // Fetch profile fields from backend when the modal opens; localStorage mirrors for offline flash.
   useEffect(() => {
     if (!isOpen || !user) return
-    // Apply localStorage values immediately (instant, no flash)
     setFormData((prev) => ({
       ...prev,
       university: prev.university || lsGet("university"),
-      location: prev.location || lsGet("location"),
+      country: prev.country || lsGet("country"),
       photoURL: prev.photoURL || lsGet("photo") || null,
     }))
     let cancelled = false
@@ -84,18 +83,17 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
           if (cancelled || !data) return
           const profile = data.profile ?? data
           const uni = profile.university ?? profile.institution ?? ""
-          const loc = profile.city ?? profile.location ?? ""
+          const ctry = profile.country ?? ""
           const photo = data.photo_url ?? profile.photoURL ?? ""
           setFormData((prev) => ({
             ...prev,
             university: uni || prev.university,
-            location: loc || prev.location,
+            country: ctry || prev.country,
             photoURL: photo || prev.photoURL,
           }))
-          // Keep localStorage in sync with what the server returned
-          if (uni)    lsSet("university", uni)
-          if (loc)    lsSet("location", loc)
-          if (photo)  lsSet("photo", photo)
+          if (uni) lsSet("university", uni)
+          if (ctry) lsSet("country", ctry)
+          if (photo) lsSet("photo", photo)
         })
         .catch(() => {})
     })
@@ -222,14 +220,12 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
         },
         body: JSON.stringify({
           university: formData.university,
-          city: formData.location,
+          country: formData.country,
         }),
       })
 
-      // Persist to localStorage regardless of whether the backend saves university/location,
-      // so the fields survive a page reload even if the backend hasn't implemented them yet.
       lsSet("university", formData.university ?? "")
-      lsSet("location", formData.location ?? "")
+      lsSet("country", formData.country ?? "")
 
       if (!response.ok) {
         throw new Error("Failed to update profile")
@@ -411,18 +407,18 @@ export function UserProfileModal({ isOpen, onClose, onLogout, profileImageUrl }:
                 />
               </div>
 
-              {/* Location Field */}
+              {/* Country — same field as onboarding (`profile.country`) */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-[#F0EBE0] mb-2">
-                  Location
+                  Country
                 </label>
                 <Input
-                  name="location"
+                  name="country"
                   type="text"
-                  value={formData.location}
+                  value={formData.country}
                   onChange={handleInputChange}
                   disabled={isLoading}
-                  placeholder="e.g., San Francisco, CA, USA"
+                  placeholder="e.g., United States"
                   className="w-full bg-gray-50 dark:bg-[#2C2A27] border-gray-300 dark:border-[rgba(255,255,255,0.09)] dark:focus:border-[rgba(155,127,212,0.45)] text-gray-900 dark:text-[#F0EBE0] rounded-[10px] py-2.5"
                 />
               </div>

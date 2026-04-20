@@ -1,43 +1,38 @@
 import { initializeApp, getApps } from "firebase/app"
 import type { Auth } from "firebase/auth"
 import { getAuth } from "firebase/auth"
-import { isInvestorMode } from "@/lib/investorMode"
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 }
 
 const hasFullFirebaseConfig = Boolean(
   firebaseConfig.apiKey &&
     firebaseConfig.authDomain &&
-    firebaseConfig.projectId &&
-    firebaseConfig.appId
+    firebaseConfig.projectId
 )
 
-/**
- * Investor / private demos skip Firebase entirely (no API keys in .env).
- * `AuthContext` never touches `auth` when `isInvestorMode()` is true.
- */
-function createAuth(): Auth {
-  if (isInvestorMode()) {
-    return null as unknown as Auth
-  }
-
+function createAuth(): Auth | null {
   if (!hasFullFirebaseConfig) {
     if (process.env.NODE_ENV !== "production") {
       console.warn(
-        "[firebase] Missing Firebase config. Set NEXT_PUBLIC_FIREBASE_* or use NEXT_PUBLIC_INVESTOR_MODE=true."
+        "[firebase] Missing Firebase config. Set NEXT_PUBLIC_FIREBASE_API_KEY, AUTH_DOMAIN, PROJECT_ID."
       )
     }
-    return null as unknown as Auth
+    return null
   }
 
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
+  const cfg = Object.fromEntries(
+    Object.entries(firebaseConfig).filter(([, v]) => v != null && String(v).trim() !== "")
+  ) as Record<string, string>
+  const app = getApps().length === 0 ? initializeApp(cfg) : getApps()[0]
   return getAuth(app)
 }
 
 export const auth = createAuth()
-

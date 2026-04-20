@@ -1,12 +1,12 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
-import { isInvestorMode } from "@/lib/investorMode"
+import { POST_AUTH_ENTRY_PATH } from "@/lib/onboardingConstants"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -49,10 +49,6 @@ export default function SignUpPage() {
   const { signUp, signInWithGoogle } = useAuth()
   const router = useRouter()
 
-  useEffect(() => {
-    if (isInvestorMode()) router.replace("/chatbot")
-  }, [router])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -80,7 +76,7 @@ export default function SignUpPage() {
         }
       }
       
-      router.push("/chatbot")
+      router.push(POST_AUTH_ENTRY_PATH)
     } catch (error: any) {
       setError(error.message || "An error occurred")
     } finally {
@@ -109,7 +105,7 @@ export default function SignUpPage() {
         }
       }
       
-      router.push("/chatbot")
+      router.push(POST_AUTH_ENTRY_PATH)
     } catch (error: any) {
       setError(error.message || "An error occurred")
     } finally {

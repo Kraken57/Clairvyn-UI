@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { handleScriptedInput } from "@/lib/demoScript"
@@ -28,7 +28,7 @@ import {
 import ReactMarkdown from "react-markdown"
 import { useAuth } from "@/contexts/AuthContext"
 import { useTheme } from "@/contexts/ThemeContext"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   createChatSession,
   renameChatSession,
@@ -44,10 +44,11 @@ import {
   loadMessagesForChat,
 } from "@/lib/chat-service"
 import { apiPath } from "@/lib/apiRoutes"
-import { apiFetch, getBackendUrl, investorFetchHeaders, isBackendNumericChatId } from "@/lib/backendApi"
-import { isInvestorMode, skipOptionalBackendIntegrations } from "@/lib/investorMode"
+import { apiFetch, apiAuthHeaders, getBackendUrl, isBackendNumericChatId } from "@/lib/backendApi"
+import { skipOptionalBackendIntegrations } from "@/lib/investorMode"
 import { FREE_GUEST_GENERATIONS, canUserGenerate, incrementUserGenerations, syncUserGenerations } from "@/lib/guest-limits"
 import { profileCountryMissing } from "@/lib/meProfile"
+import { POST_AUTH_ENTRY_PATH } from "@/lib/onboardingConstants"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useClairvynOnboarding } from "@/hooks/useClairvynOnboarding"
 import { WaitlistModal } from "@/components/WaitlistModal"
@@ -93,6 +94,22 @@ function clipErrorMessage(s: string, maxLen = 1200): string {
   const t = s.trim()
   if (!t) return ""
   return t.length <= maxLen ? t : `${t.slice(0, maxLen).trim()} …`
+}
+
+/**
+ * Canonical chat URLs: `/chatbot` (new / unsynced) or `/chatbot/<numeric_id>` (server chat).
+ * Path-based routing matches common REST-style resource URLs and scales cleanly with Next.js layouts.
+ */
+function syncCanonicalChatPath(
+  router: Pick<ReturnType<typeof useRouter>, "replace">,
+  pathname: string,
+  chatId: string | null
+) {
+  const want =
+    chatId && isBackendNumericChatId(chatId) ? `/chatbot/${chatId}` : "/chatbot"
+  if (pathname !== want) {
+    router.replace(want, { scroll: false })
+  }
 }
 
 type FeedbackType = "positive" | "negative"
@@ -174,14 +191,8 @@ function AuthImage({
       .current()
       .then((token) => {
         if (cancelled) return
-        // No token: still fetch (investor / DISABLE_API_AUTH / X-Clairvyn-Investor).
         if (!token) {
-          const h = investorFetchHeaders(null)
-          return fetch(src, {
-            mode: "cors",
-            credentials: "omit",
-            ...(Object.keys(h).length ? { headers: h } : {}),
-          })
+          return fetch(src, { mode: "cors", credentials: "omit" })
         }
         return fetch(src, { headers: { Authorization: `Bearer ${token}` } })
       })
@@ -219,10 +230,11 @@ function AuthImage({
 /** Founders always get unlimited generations regardless of payment status. */
 const FOUNDER_EMAILS = ["ronakmm2005@gmail.com", "yaswantmodi@gmail.com"]
 
-export default function ChatbotPage() {
+export default function ChatbotClient() {
   const { user, logout, loading: authLoading, getIdToken, isGuest } = useAuth()
   const { isDarkMode, toggleDarkMode } = useTheme()
   const router = useRouter()
+  const pathname = usePathname()
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false) // used for mobile drawer
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false) // Profile modal state
@@ -341,8 +353,8 @@ export default function ChatbotPage() {
         .then((data) => {
           if (cancelled || !data) return
           console.log("[Clairvyn] /api/me user details:", data)
-          if (!isInvestorMode() && !isGuest && profileCountryMissing(data.profile)) {
-            router.replace("/onboarding/profile")
+          if (!isGuest && profileCountryMissing(data.profile)) {
+            router.replace(POST_AUTH_ENTRY_PATH)
             return
           }
           if (typeof data.has_paid === "boolean") setHasPaid(data.has_paid)
@@ -537,14 +549,39 @@ export default function ChatbotPage() {
             console.log("[Clairvyn] initChat: skip session restore — user already interacting")
             return
           }
-          const preferredId = getLastActiveChatId(uid)
-          const fallbackId = sessions[0].id
-          const targetId =
-            preferredId && sessions.some((s) => s.id === preferredId) ? preferredId : fallbackId
+          const pathSeg =
+            typeof window !== "undefined"
+              ? window.location.pathname.match(/^\/chatbot\/(\d+)$/)?.[1] ?? null
+              : null
+          const legacyQuery =
+            typeof window !== "undefined"
+              ? new URLSearchParams(window.location.search).get("chat")
+              : null
+          const urlChat =
+            pathSeg && isBackendNumericChatId(pathSeg)
+              ? pathSeg
+              : legacyQuery && isBackendNumericChatId(legacyQuery)
+                ? legacyQuery
+                : null
+          let targetId: string | null = null
+          if (urlChat && token) {
+            if (sessions.some((s) => s.id === urlChat)) {
+              targetId = urlChat
+            } else {
+              const probe = await loadMessagesForChat(uid, urlChat, token)
+              if (probe.fromBackend) targetId = urlChat
+            }
+          }
+          if (!targetId) {
+            const preferredId = getLastActiveChatId(uid)
+            const fallbackId = sessions[0].id
+            targetId =
+              preferredId && sessions.some((s) => s.id === preferredId) ? preferredId : fallbackId
+          }
           console.log("[Clairvyn] initChat: restoring session", {
             targetId,
-            preferredId,
-            fallbackId,
+            pathSeg,
+            legacyQuery,
           })
 
           const { messages: sessionMessages, fromBackend: loadedFromBackend } =
@@ -589,6 +626,28 @@ export default function ChatbotPage() {
       }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, authLoading])
+
+  // Migrate old ?chat=<id> bookmarks to /chatbot/<id>
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return
+    if (pathname !== "/chatbot") return
+    const q = new URLSearchParams(window.location.search).get("chat")
+    if (q && isBackendNumericChatId(q)) {
+      router.replace(`/chatbot/${q}`, { scroll: false })
+    }
+  }, [pathname, router])
+
+  // Keep the address bar on the canonical path when viewing a persisted server chat.
+  useEffect(() => {
+    if (!user?.uid) return
+    const id =
+      currentChatId && isBackendNumericChatId(currentChatId)
+        ? currentChatId
+        : backendChatId && isBackendNumericChatId(backendChatId)
+          ? backendChatId
+          : null
+    if (id) syncCanonicalChatPath(router, pathname, id)
+  }, [user?.uid, currentChatId, backendChatId, pathname, router])
 
   // After return from PhonePe: confirm payment, then refetch has_paid
   useEffect(() => {
@@ -644,6 +703,7 @@ export default function ChatbotPage() {
     setCurrentChatId(null)
     setBackendChatId(null)
     setInputValue("")
+    syncCanonicalChatPath(router, pathname, null)
     if (textareaRef.current) textareaRef.current.style.height = "auto"
     console.log("[Clairvyn] createNewChat: reset to blank (will persist on first message)")
   }
@@ -712,7 +772,7 @@ export default function ChatbotPage() {
     // Unpaid signed-in users: enforce per-user floor plan limit (3 free generations).
     // Founders are exempt from all generation limits.
     const isFounder = user?.email ? FOUNDER_EMAILS.includes(user.email.toLowerCase()) : false
-    if (!isInvestorMode() && !hasPaid && !isFounder && user) {
+    if (!hasPaid && !isFounder && user) {
       if (!canUserGenerate(user.uid)) {
         setWaitlistOpen(true)
         return
@@ -752,7 +812,7 @@ export default function ChatbotPage() {
       }
 
       const token = await getIdToken()
-      if (!token && !isInvestorMode() && !isGuest) {
+      if (!token && !isGuest) {
         throw new Error("Missing auth token")
       }
 
@@ -894,7 +954,7 @@ export default function ChatbotPage() {
       console.log("[Clairvyn] handleSubmit: success", { historyLength: updatedHistory.length, assistantContent: (finalData as any)?.assistant_message?.content });
 
       // Only count a generation when the backend actually produced a floor plan
-      if (!isInvestorMode() && !hasPaid && !isFounder && user) {
+      if (!hasPaid && !isFounder && user) {
         const lastAssistant = updatedHistory.filter((m) => m.role === "assistant").pop()
         const producedFloorPlan = Boolean(
           lastAssistant?.extra_data?.document_id || lastAssistant?.extra_data?.png_url
@@ -954,7 +1014,14 @@ export default function ChatbotPage() {
         role: 'assistant',
         content,
       }
-      setMessages(prev => [...prev, { ...errorMessage, timestamp: new Date().toISOString() }])
+      const ts = new Date().toISOString()
+      setMessages((prev) => {
+        const next = [...prev, { ...errorMessage, timestamp: ts }]
+        if (user && activeChatId) {
+          void setChatMessages(user.uid, activeChatId, next)
+        }
+        return next
+      })
     } finally {
       submittingRef.current = false
       setIsTurnInFlight(false)
@@ -1004,7 +1071,7 @@ export default function ChatbotPage() {
 
     try {
       const token = await getIdToken()
-      if (!token && !isInvestorMode()) throw new Error("Missing auth token")
+      if (!token) throw new Error("Missing auth token")
 
       await apiFetch(
         apiPath.chatFeedback(chatId),
@@ -1048,13 +1115,13 @@ export default function ChatbotPage() {
       return
     }
     const token = await getIdToken()
-    if (!token && !isInvestorMode()) {
+    if (!token) {
       console.warn("[Clairvyn] downloadDxf: no token");
       return
     }
     try {
       const url = getBackendUrl(apiPath.chatFile(chatId, `${documentId}.dxf`))
-      const res = await fetch(url, { headers: investorFetchHeaders(token) })
+      const res = await fetch(url, { headers: apiAuthHeaders(token) })
       if (!res.ok) throw new Error(res.statusText)
       const blob = await res.blob()
       const href = URL.createObjectURL(blob)
@@ -1082,13 +1149,13 @@ export default function ChatbotPage() {
       return
     }
     const token = await getIdToken()
-    if (!token && !isInvestorMode()) {
+    if (!token) {
       console.warn("[Clairvyn] downloadPng: no token");
       return
     }
     try {
       const url = getBackendUrl(apiPath.chatFile(chatId, `${documentId}.png`))
-      const res = await fetch(url, { headers: investorFetchHeaders(token) })
+      const res = await fetch(url, { headers: apiAuthHeaders(token) })
       if (!res.ok) throw new Error(res.statusText)
       const blob = await res.blob()
       const href = URL.createObjectURL(blob)
@@ -1203,6 +1270,7 @@ export default function ChatbotPage() {
       setMessages([])
       setHasStarted(false)
       setBackendChatId(null)
+      syncCanonicalChatPath(router, pathname, null)
       if (user) {
         const newId = await createChatSession(user.uid)
         setCurrentChatId(newId)
@@ -1422,24 +1490,22 @@ export default function ChatbotPage() {
             />
           </div>
         </button>
-        {!isInvestorMode() && (
-          user ? (
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-[#A8A090] hover:bg-gray-100/70 dark:hover:bg-[#2A2825] hover:text-red-600 dark:hover:text-red-400 transition-colors"
-            >
-              <LogOut className="w-4 h-4 text-gray-500 dark:text-[#6B6458]" />
-              Sign out
-            </button>
-          ) : (
-            <button
-              onClick={handleSignIn}
-              className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-[#A8A090] hover:bg-gray-100/70 dark:hover:bg-[#2A2825] transition-colors"
-            >
-              <LogIn className="w-4 h-4 text-gray-500 dark:text-[#6B6458]" />
-              Sign in
-            </button>
-          )
+        {user ? (
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-[#A8A090] hover:bg-gray-100/70 dark:hover:bg-[#2A2825] hover:text-red-600 dark:hover:text-red-400 transition-colors"
+          >
+            <LogOut className="w-4 h-4 text-gray-500 dark:text-[#6B6458]" />
+            Sign out
+          </button>
+        ) : (
+          <button
+            onClick={handleSignIn}
+            className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-[#A8A090] hover:bg-gray-100/70 dark:hover:bg-[#2A2825] transition-colors"
+          >
+            <LogIn className="w-4 h-4 text-gray-500 dark:text-[#6B6458]" />
+            Sign in
+          </button>
         )}
       </div>
     </div>

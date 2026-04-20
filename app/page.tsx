@@ -10,9 +10,7 @@ import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { LandingHeader } from "@/components/LandingHeader"
 import LandingPageLoader from "@/components/LandingPageLoader"
-import { isInvestorMode } from "@/lib/investorMode"
-
-
+import { POST_AUTH_ENTRY_PATH } from "@/lib/onboardingConstants"
 export default function HomePage() {
   const { user, loading } = useAuth()
   const router = useRouter()
@@ -45,8 +43,9 @@ export default function HomePage() {
     }
   }, [loading])
 
-  // Prefetch chatbot so redirect feels instant
+  // Prefetch post-auth entry (onboarding or bounce to chatbot) for a snappy redirect
   useEffect(() => {
+    router.prefetch(POST_AUTH_ENTRY_PATH)
     router.prefetch("/chatbot")
   }, [router])
 
@@ -80,7 +79,6 @@ export default function HomePage() {
 
   // If already logged in and this is their first visit to landing page in this session, redirect to chat
   useEffect(() => {
-    if (isInvestorMode()) return
     if (loading) return
     if (!user) return
 
@@ -150,14 +148,10 @@ export default function HomePage() {
   }, [user, loading, router])
 
   const handleTryIt = () => {
-    if (isInvestorMode()) {
-      router.push("/chatbot")
-      return
-    }
     console.log('handleTryIt called')
     if (user) {
-      console.log('User is authenticated, redirecting to /chatbot')
-      router.push("/chatbot")
+      console.log("User is authenticated, redirecting to post-auth entry")
+      router.push(POST_AUTH_ENTRY_PATH)
     } else {
       console.log('User is not authenticated, redirecting to /signup')
       router.push("/signup")
@@ -168,10 +162,8 @@ export default function HomePage() {
   // If loading state hangs for 5+ seconds, show landing page anyway (with timeout flag)
   // If redirect was decided (user staying on landing), fall through to show landing content
   // If redirect timed out (router.replace stalled), show landing page as fallback
-  // Investor / private EC2 mode: always show landing until user clicks Try Now (no auth spinner)
   if (
-    !isInvestorMode() &&
-    ((loading && !loadingTimeout) || (user && !redirectDecided && !redirectTimedOut))
+    (loading && !loadingTimeout) || (user && !redirectDecided && !redirectTimedOut)
   ) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">

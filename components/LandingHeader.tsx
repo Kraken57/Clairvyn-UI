@@ -8,7 +8,6 @@ import { Menu, Tag, Info, BookOpen, X } from "lucide-react"
 import { motion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
-import { isInvestorMode } from "@/lib/investorMode"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 const glassBar =
@@ -23,7 +22,7 @@ export function LandingHeader() {
 
   const goSignIn = () => {
     setMenuOpen(false)
-    if (!isInvestorMode()) router.push("/signin")
+    router.push("/signin")
   }
 
   return (
@@ -62,7 +61,6 @@ export function LandingHeader() {
 
             {/* Right: Actions */}
             <div className="flex flex-1 items-center justify-end gap-2">
-              {!isInvestorMode() && (
               <button
                 type="button"
                 onClick={() => router.push("/signin")}
@@ -70,7 +68,6 @@ export function LandingHeader() {
               >
                 Sign In
               </button>
-              )}
 
               <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
                 <button
@@ -154,7 +151,6 @@ export function LandingHeader() {
                     </motion.div>
                   </nav>
                   
-                  {!isInvestorMode() && (
                   <div className="mt-auto border-t border-gray-100 px-4 py-6">
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
@@ -170,7 +166,6 @@ export function LandingHeader() {
                       </button>
                     </motion.div>
                   </div>
-                  )}
                 </SheetContent>
               </Sheet>
             </div>

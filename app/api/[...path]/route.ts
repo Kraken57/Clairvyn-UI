@@ -51,13 +51,6 @@ async function proxy(request: NextRequest): Promise<Response> {
   // Defensive: some runtimes omit custom headers from the iterable; re-apply by name.
   const authorization = request.headers.get("authorization")
   if (authorization) outHeaders.set("Authorization", authorization)
-  const investor = request.headers.get("x-clairvyn-investor")
-  if (investor) outHeaders.set("X-Clairvyn-Investor", investor.trim())
-
-  // Tokenless chat (apiFetch with no Bearer): ensure demo header reaches Flask even if Next dropped it from the copy above.
-  if (!authorization?.trim()) {
-    outHeaders.set("X-Clairvyn-Investor", "1")
-  }
 
   const method = request.method
   const init: RequestInit = {

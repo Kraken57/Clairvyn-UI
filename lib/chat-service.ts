@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { apiPath } from "./apiRoutes";
 import { apiFetch, isBackendNumericChatId } from "./backendApi";
-import { isInvestorMode } from "./investorMode";
 
 export interface Message {
   id?: string | number;
@@ -218,7 +217,7 @@ function mapApiMessagesPayload(data: unknown): Message[] {
 // Get messages for a chat session
 export const getChatMessages = async (userId: string, chatId: string, token?: string): Promise<Message[]> => {
   console.log("[Clairvyn:chat] getChatMessages", { chatId, hasToken: !!token });
-  if (token || isInvestorMode()) {
+  if (token) {
     if (isBackendNumericChatId(chatId)) {
       try {
         const data = await apiFetch<any>(apiPath.chatMessages(chatId), {
@@ -243,7 +242,7 @@ export async function loadMessagesForChat(
   chatId: string,
   token: string | null | undefined
 ): Promise<{ messages: Message[]; fromBackend: boolean }> {
-  if ((token || isInvestorMode()) && isBackendNumericChatId(chatId)) {
+  if (token && isBackendNumericChatId(chatId)) {
     try {
       const data = await apiFetch<any>(apiPath.chatMessages(chatId), {
         method: "GET",
@@ -263,7 +262,7 @@ export const getUserChatSessions = async (
   token?: string
 ): Promise<ChatSession[]> => {
   console.log("[Clairvyn:chat] getUserChatSessions", { userId, hasToken: !!token });
-  if (token || isInvestorMode()) {
+  if (token) {
     try {
       const raw = await apiFetch<unknown>(apiPath.chats(), {
         method: "GET",
@@ -350,7 +349,7 @@ export const deleteChatSession = async (
   token: string | null
 ): Promise<boolean> => {
   try {
-    if (token || isInvestorMode()) {
+    if (token) {
       if (isBackendNumericChatId(chatId)) {
         try {
           await apiFetch(apiPath.chatDelete(chatId), {

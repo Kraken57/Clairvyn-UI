@@ -19,7 +19,6 @@ import {
   OAuthProvider,
 } from "firebase/auth"
 import { auth } from "@/lib/firebase"
-import { INVESTOR_PREVIEW_USER, isInvestorMode } from "@/lib/investorMode"
 
 interface AuthContextType {
   user: FirebaseUser | null
@@ -45,17 +44,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isGuest, setIsGuest] = useState(false)
 
   const applyAuthPersistence = async (rememberMe: boolean) => {
+    if (!auth) return
     await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence)
   }
 
   useEffect(() => {
-    if (isInvestorMode()) {
-      setIsGuest(false)
-      setUser(INVESTOR_PREVIEW_USER)
-      setLoading(false)
-      return
-    }
-
     if (!auth) {
       console.warn("[Clairvyn] Firebase is not configured (missing NEXT_PUBLIC_FIREBASE_*).")
       setLoading(false)
@@ -113,18 +106,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signIn = async (email: string, password: string, rememberMe = true) => {
+    if (!auth) throw new Error("Firebase Auth is not configured")
     await applyAuthPersistence(rememberMe)
     await signInWithEmailAndPassword(auth, email, password)
     await migrateGuestChats()
   }
 
   const signUp = async (email: string, password: string) => {
+    if (!auth) throw new Error("Firebase Auth is not configured")
     await createUserWithEmailAndPassword(auth, email, password)
     await migrateGuestChats()
     console.log("Signed up with email:", email)
   }
 
   const signInWithGoogle = async (options?: { rememberMe?: boolean }) => {
+    if (!auth) throw new Error("Firebase Auth is not configured")
     await applyAuthPersistence(options?.rememberMe ?? true)
     const provider = new GoogleAuthProvider()
     
@@ -210,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signInWithGithub = async (options?: { rememberMe?: boolean }) => {
+    if (!auth) throw new Error("Firebase Auth is not configured")
     await applyAuthPersistence(options?.rememberMe ?? true)
     const provider = new GithubAuthProvider()
     await signInWithPopup(auth, provider)
@@ -218,20 +215,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = async () => {
-    if (isInvestorMode()) {
-      if (typeof window !== "undefined") {
-        try {
-          sessionStorage.removeItem("fromChatbot")
-          sessionStorage.removeItem("hasVisitedApp")
-          sessionStorage.removeItem("lastChatbotActivityTime")
-        } catch {
-          /* ignore */
-        }
-      }
-      setUser(INVESTOR_PREVIEW_USER)
-      return
-    }
-
     // Clear all redirect flags to ensure clean state on next login
     if (typeof window !== "undefined") {
       try {
@@ -253,7 +236,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const getIdToken = useCallback(
     async (forceRefresh = false): Promise<string | null> => {
-      if (isInvestorMode()) return null
       if (!auth) return null
       if (!auth.currentUser) return null
       try {
