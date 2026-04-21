@@ -1,4 +1,4 @@
-/** Number of free AI generations for guest users before paywall. */
+/** Number of free AI generations for guest users before the waitlist prompt. */
 export const FREE_GUEST_GENERATIONS = 3
 
 const STORAGE_KEY = "guestGenerationsUsed"

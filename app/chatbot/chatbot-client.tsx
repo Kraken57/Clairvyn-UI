@@ -47,7 +47,7 @@ import { apiFetch, apiAuthHeaders, getBackendUrl, isBackendNumericChatId } from 
 import { skipOptionalBackendIntegrations } from "@/lib/investorMode"
 import { FREE_GUEST_GENERATIONS, canUserGenerate, incrementUserGenerations, syncUserGenerations } from "@/lib/guest-limits"
 import { profileCountryMissing } from "@/lib/meProfile"
-import { POST_AUTH_ENTRY_PATH } from "@/lib/onboardingConstants"
+import { POST_AUTH_ENTRY_PATH, onboardingDoneStorageKey } from "@/lib/onboardingConstants"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useClairvynOnboarding } from "@/hooks/useClairvynOnboarding"
 import { WaitlistModal } from "@/components/WaitlistModal"
@@ -386,8 +386,19 @@ export default function ChatbotClient() {
             setProfileDisplayName(data.display_name.trim())
           }
           if (!isGuest && profileCountryMissing(data.profile)) {
-            router.replace(POST_AUTH_ENTRY_PATH)
-            return
+            // Respect the local onboarding-done flag so a stale/racing /api/me
+            // response can't bounce a user who's already completed the form.
+            const localDone =
+              typeof window !== "undefined" &&
+              !!user?.uid &&
+              localStorage.getItem(onboardingDoneStorageKey(user.uid)) === "1"
+            if (!localDone) {
+              router.replace(POST_AUTH_ENTRY_PATH)
+              return
+            }
+          } else if (!isGuest && user?.uid && typeof window !== "undefined") {
+            // Backend confirms country is set — keep local flag in sync for future loads.
+            localStorage.setItem(onboardingDoneStorageKey(user.uid), "1")
           }
           if (typeof data.has_paid === "boolean") setHasPaid(data.has_paid)
           if (typeof data.generation_count === "number" && user?.uid) {
@@ -762,15 +773,6 @@ export default function ChatbotClient() {
     if (id) syncCanonicalChatPath(router, pathname, id)
   }, [user?.uid, currentChatId, backendChatId, pathname, router])
 
-  // Clean up any legacy `?payment_return=…` query params left over from the
-  // deprecated PhonePe flow so the URL doesn't leak a redirect marker.
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const params = new URLSearchParams(window.location.search)
-    if (params.get("payment_return")) {
-      window.history.replaceState({}, "", "/chatbot")
-    }
-  }, [])
 
   useEffect(() => {
     if (!user) {

@@ -57,13 +57,26 @@ export default function OnboardingProfilePage() {
         return
       }
 
+      const localDone =
+        typeof window !== "undefined" &&
+        !!user?.uid &&
+        localStorage.getItem(onboardingDoneStorageKey(user.uid)) === "1"
+
       const profile = await fetchMeProfile(token)
       if (cancelled) return
+
       if (profile === undefined) {
-        // Backend reachability is unknown — don't trap users on onboarding.
-        router.replace("/chatbot")
+        // Backend unreachable. If the user already finished onboarding locally,
+        // trust that and send them to the chatbot instead of trapping them here.
+        if (localDone) {
+          router.replace("/chatbot")
+          return
+        }
+        // First-time user with a flaky backend — render the form so they can retry.
+        setGateOk(true)
         return
       }
+
       if (!profileCountryMissing(profile)) {
         if (typeof window !== "undefined" && user?.uid) {
           localStorage.setItem(onboardingDoneStorageKey(user.uid), "1")
