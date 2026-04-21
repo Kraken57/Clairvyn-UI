@@ -607,6 +607,55 @@ export default function ChatbotClient() {
     }
   }, [showAssistantLoader])
 
+  // Resume polling on page reload if an assistant message is pending
+  useEffect(() => {
+    if (!inferredPendingAssistant || isTurnInFlight || !currentChatId || !user) return
+
+    let cancelled = false
+    const pollInterval = setInterval(async () => {
+      try {
+        const token = await getIdToken()
+        if (!token) return
+        const histData = await apiFetch<any>(apiPath.chatMessages(currentChatId), {
+          method: "GET",
+          token,
+        })
+        if (cancelled) return
+
+        const array: any[] = Array.isArray(histData?.history)
+          ? histData.history
+          : Array.isArray(histData?.messages)
+          ? histData.messages
+          : []
+        
+        if (array.length === 0) return
+
+        const lastMsg = array[array.length - 1]
+        // If the last message is from the assistant, generation finished!
+        if (lastMsg?.sender_type === "assistant") {
+          const updatedHistory: ChatMessage[] = array.map((m: any) => ({
+            id: m.id,
+            role: m.sender_type === "user" ? "user" : "assistant",
+            content: m.content ?? "",
+            timestamp: typeof m.created_at === "string" ? m.created_at : new Date().toISOString(),
+            image_url: m.image_url ?? undefined,
+            extra_data: m.extra_data ?? undefined,
+            feedback_submitted: Boolean(m.feedback_submitted),
+          }))
+          setMessages(updatedHistory)
+          // The effect will auto-cleanup because setMessages will make inferredPendingAssistant false
+        }
+      } catch (err) {
+        console.warn("[Clairvyn] background poll error", err)
+      }
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      clearInterval(pollInterval)
+    }
+  }, [inferredPendingAssistant, isTurnInFlight, currentChatId, user])
+
   // Load sessions once per auth user. `/chatbot` = new conversation (no auto-restore). `/chatbot/:id` = that thread.
   useEffect(() => {
     console.log("[Clairvyn] init effect", { hasUser: !!user, currentChatId, authLoading });
@@ -870,6 +919,35 @@ export default function ChatbotClient() {
       content: userText
     }
 
+    // Robustly check founder emails (sometimes user.email is hidden, so we check providerData)
+    const emailsToCheck = [
+      user?.email,
+      ...(user?.providerData?.map((p) => p.email) || []),
+    ].filter(Boolean) as string[]
+    const isFounder = emailsToCheck.some((e) => FOUNDER_EMAILS.includes(e.toLowerCase()))
+
+    // Unpaid signed-in users: enforce per-user floor plan limit (3 free generations).
+    if (!hasPaid && !isFounder && user) {
+      if (!canUserGenerate(user.uid)) {
+        // If out of limits, still add the user's message to the UI but immediately reply with the limits notice
+        const limitNotice: ChatMessage = {
+          role: "assistant",
+          content:
+            "The free tier permits only 3 generations. We will soon come with paid plans. We are also working to improve the existing models. Currently the models have a lot of limitations but we are constantly improving the capabilities and will soon support more room types and multi storey too.",
+          timestamp: new Date().toISOString(),
+        }
+        setMessages((prev) => [
+          ...prev,
+          { ...userMessage, timestamp: new Date().toISOString() },
+          limitNotice,
+        ])
+        setInputValue("")
+        if (textareaRef.current) textareaRef.current.style.height = "auto"
+        setWaitlistOpen(true)
+        return
+      }
+    }
+
     // Add user message to UI immediately (will be replaced by history from server)
     setMessages(prev => [...prev, { ...userMessage, timestamp: new Date().toISOString() }])
 
@@ -902,16 +980,6 @@ export default function ChatbotClient() {
     if (allowLocalScriptedReplies) {
       const handled = handleScriptedInput(normalized, { addMessage, setTyping })
       if (handled) {
-        return
-      }
-    }
-
-    // Unpaid signed-in users: enforce per-user floor plan limit (3 free generations).
-    // Founders are exempt from all generation limits.
-    const isFounder = user?.email ? FOUNDER_EMAILS.includes(user.email.toLowerCase()) : false
-    if (!hasPaid && !isFounder && user) {
-      if (!canUserGenerate(user.uid)) {
-        setWaitlistOpen(true)
         return
       }
     }
@@ -2020,9 +2088,15 @@ export default function ChatbotClient() {
                     }`}
                 >
                   <div className="text-xs sm:text-base leading-relaxed lg:text-[15.5px] lg:leading-[1.78] space-y-1">
-                    {(message.content ?? "").split('\n').map((line: string, i: number) => (
-                      line === '' ? <div key={i} className="h-2" /> : <p key={i}>{line}</p>
-                    ))}
+                    {(() => {
+                      let text = message.content ?? "";
+                      if (message.role === "assistant" && (message as any).extra_data?.error) {
+                         text = "I'm sorry, I couldn't interpret your prompt correctly or encountered an issue. Please try rephrasing your requirements, or simplify the prompt.";
+                      }
+                      return text.split('\n').map((line: string, i: number) => (
+                        line === '' ? <div key={i} className="h-2" /> : <p key={i}>{line}</p>
+                      ))
+                    })()}
                   </div>
                   {/* Support for image/extra data and description (demo script + backend responses) */}
                   {(message as any).image || (message as any).image_url || (message as any).extra_data?.png_url || (message as any).extra_data?.dxf_url || (message as any).extra_data?.document_id ? (

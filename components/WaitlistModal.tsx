@@ -68,7 +68,7 @@ export function WaitlistModal({ open, onOpenChange }: WaitlistModalProps & { use
           Join the waitlist
         </h2>
         <p className="mt-1 text-sm text-gray-600 dark:text-[#A8A090]">
-          Be the first to know when the Company plan is available.
+          Be the first to know when our new models and premium features are available.
         </p>
         <WaitlistSignup key={formKey} title="" className="mt-4" userEmail={user?.email || undefined} />
       </div>
