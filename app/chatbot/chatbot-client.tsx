@@ -206,7 +206,7 @@ function AuthImage({
   getToken: () => Promise<string | null>
 }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const [error, setError] = useState(false)
+  const [status, setStatus] = useState<"loading" | "ok" | "missing" | "error">("loading")
   const blobUrlRef = useRef<string | null>(null)
 
   const getTokenRef = useRef(getToken)
@@ -215,31 +215,43 @@ function AuthImage({
   useEffect(() => {
     if (!src) return
     let cancelled = false
-    setError(false)
+    setStatus("loading")
+
     getTokenRef
       .current()
       .then((token) => {
         if (cancelled) return
-        if (!token) {
-          return fetch(src, { mode: "cors", credentials: "omit" })
-        }
-        return fetch(src, { headers: { Authorization: `Bearer ${token}` } })
+        const headers: Record<string, string> = {}
+        if (token) headers["Authorization"] = `Bearer ${token}`
+        return fetch(src, { headers, mode: "cors", credentials: token ? "include" : "omit" })
       })
-      .then((res) => {
-        if (!res?.ok || cancelled) {
-          if (res && !res.ok) setError(true)
-          return null
+      .then(async (res) => {
+        if (cancelled || !res) return
+        if (res.status === 404) {
+          // Check if backend returned our structured "floor_plan_unavailable" JSON.
+          try {
+            const json = await res.json().catch(() => null)
+            if (json?.error === "floor_plan_unavailable") {
+              setStatus("missing")
+              return
+            }
+          } catch {/* ignore */}
+          setStatus("missing")
+          return
         }
-        return res!.blob()
-      })
-      .then((blob) => {
-        if (!blob || cancelled) return
+        if (!res.ok) {
+          setStatus("error")
+          return
+        }
+        const blob = await res.blob()
+        if (cancelled) return
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
         const url = URL.createObjectURL(blob)
         blobUrlRef.current = url
         setObjectUrl(url)
+        setStatus("ok")
       })
-      .catch(() => !cancelled && setError(true))
+      .catch(() => !cancelled && setStatus("error"))
 
     return () => {
       cancelled = true
@@ -251,8 +263,27 @@ function AuthImage({
     }
   }, [src])
 
-  if (error) return <span className={className}>Failed to load image</span>
-  if (!objectUrl) return <span className={className}>Loading...</span>
+  if (status === "missing") {
+    return (
+      <div className={`flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 ${className ?? ""}`}>
+        <span className="text-base">🗂️</span>
+        <span>Floor plan image is no longer stored on this server. Send the same prompt again to regenerate it.</span>
+      </div>
+    )
+  }
+  if (status === "error") {
+    return (
+      <div className={`flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300 ${className ?? ""}`}>
+        <span className="text-base">⚠️</span>
+        <span>Could not load floor plan image. Try refreshing or regenerating.</span>
+      </div>
+    )
+  }
+  if (status === "loading" || !objectUrl) {
+    return (
+      <div className={`rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse h-48 w-full ${className ?? ""}`} />
+    )
+  }
   return <img src={objectUrl} alt={alt} className={className} />
 }
 
