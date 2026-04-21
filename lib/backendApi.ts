@@ -145,6 +145,7 @@ export async function apiFetch<TResponse, TBody = unknown>(
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal,
+      cache: "no-store",
     })
   } catch (e) {
     const networkMessage = String((e as Error)?.message ?? e)
