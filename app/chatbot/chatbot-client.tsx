@@ -57,37 +57,50 @@ import { GreetingMessage } from "@/components/GreetingMessage"
 /** Shown while waiting for an assistant turn; phases follow elapsed time; line changes every 4–6s. */
 const ASSISTANT_STATUS_PHASES: readonly (readonly string[])[] = [
   [
+    // Phase 0: 0–3 min — reading and planning
     "Interpreting your requirements",
-    "Mapping spatial constraints",
+    "Reading your floor plan prompt",
+    "Mapping spatial constraints and room counts",
     "Translating inputs into layout logic",
-    "Defining room relationships",
+    "Defining room relationships and adjacencies",
+    "Calculating total area and proportions",
+    "Identifying structural requirements",
   ],
   [
+    // Phase 1: 3–7 min — generating the core layout
     "Generating initial floor plan structure",
-    "Optimizing room placements for flow",
-    "Aligning walls and dimensions",
+    "Sketching room boundaries and walls",
+    "Optimising room placements for flow",
+    "Aligning walls, dimensions, and setbacks",
     "Ensuring structural feasibility",
-    "Calculating circulation efficiency",
+    "Checking circulation paths between rooms",
     "Adjusting proportions for usability",
-    "Eliminating wasted space",
+    "Eliminating wasted corridor space",
+    "Balancing private and shared zones",
   ],
   [
+    // Phase 2: 7–12 min — detailing
     "Positioning doors and entry points",
-    "Placing windows for light and ventilation",
-    "Arranging furniture for functionality",
-    "Balancing private and common areas",
-    "Refining layout for real-world use",
+    "Placing windows for natural light and airflow",
+    "Arranging furniture assets for each room",
+    "Verifying clearances and walkways",
+    "Adding balconies, utility, and service areas",
+    "Cross-checking room sizes against specifications",
+    "Refining the layout for real-world use",
   ],
   [
-    "Running final layout checks",
+    // Phase 3: 12+ min — final checks and export
+    "Running final layout validation checks",
     "Fine-tuning spatial alignment",
-    "Preparing clean 2D output",
-    "Almost ready",
+    "Rendering the 2D floor plan image",
+    "Generating DXF file for download",
+    "Performing a last quality pass",
+    "Almost ready — wrapping up",
   ],
 ]
 
-/** Phase boundaries (ms from start): start 0–2m, then mid, detail, final until done. */
-const ASSISTANT_PHASE_END_MS = [120_000, 300_000, 420_000] as const
+/** Phase boundaries (ms from start): 0–3 min intro, 3–7 min core gen, 7–12 min detail, 12+ final. */
+const ASSISTANT_PHASE_END_MS = [180_000, 420_000, 720_000] as const
 const CLAIRVYN_HELP_REPLY =
   "I can help with floor-plan generation and edits (for example: 'design a 3BHK', 'make the kitchen larger', 'move the sofa'). For non-floorplan questions, please ask in the context of a floor plan and I will guide you."
 
