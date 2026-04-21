@@ -7,9 +7,7 @@ import {
   DialogContent,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Loader2, Sparkles, Zap, Crown, X, Check } from "lucide-react"
-import { getBackendUrl } from "@/lib/backendApi"
-import { skipOptionalBackendIntegrations } from "@/lib/investorMode"
+import { Sparkles, Zap, Crown, X, Check } from "lucide-react"
 
 const PAYWALL_PRICE_INR = 299
 const FREE_GENERATIONS = 6
@@ -33,63 +31,16 @@ export function PaymentPaywallModal({
   open,
   onClose,
   hasUser,
-  getToken,
   onSignInClick,
 }: PaymentPaywallModalProps) {
-  const [payLoading, setPayLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handlePayWithPhonePe = async () => {
+  const handleUpgradeClick = () => {
     if (!hasUser) {
       onSignInClick()
       return
     }
-    if (skipOptionalBackendIntegrations()) {
-      setError("Payments are not available in local or preview builds.")
-      return
-    }
-    setError(null)
-    setPayLoading(true)
-    try {
-      const token = await getToken()
-      if (!token) {
-        setError("Please sign in to pay.")
-        setPayLoading(false)
-        return
-      }
-      const origin = typeof window !== "undefined" ? window.location.origin : ""
-      const merchantOrderId = `clv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-      const redirectUrl = `${origin}/chatbot?payment_return=1&order_id=${encodeURIComponent(merchantOrderId)}`
-
-      const res = await fetch(getBackendUrl("/api/payments/phonepe/create"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          amount_in_inr: PAYWALL_PRICE_INR,
-          order_id: merchantOrderId,
-          redirect_url: redirectUrl,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(data?.error || "Failed to start payment")
-        setPayLoading(false)
-        return
-      }
-      const redirectTo = data?.redirect_url
-      if (redirectTo) {
-        window.location.href = redirectTo
-        return
-      }
-      setError("No payment link received")
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong")
-    } finally {
-      setPayLoading(false)
-    }
+    setError("Self-serve billing isn't live yet. Email support@clairvyn.com to upgrade.")
   }
 
   const handleMaybeLater = () => {
@@ -246,16 +197,13 @@ export function PaymentPaywallModal({
               className="flex flex-col gap-2.5"
             >
               <Button
-                onClick={handlePayWithPhonePe}
-                disabled={payLoading}
+                onClick={handleUpgradeClick}
                 className={primaryBtn}
               >
-                {payLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : hasUser ? (
+                {hasUser ? (
                   <span className="flex items-center gap-2">
                     <Zap className="w-4 h-4" />
-                    Pay with PhonePe
+                    Upgrade to Premium
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">

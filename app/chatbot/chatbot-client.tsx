@@ -762,41 +762,15 @@ export default function ChatbotClient() {
     if (id) syncCanonicalChatPath(router, pathname, id)
   }, [user?.uid, currentChatId, backendChatId, pathname, router])
 
-  // After return from PhonePe: confirm payment, then refetch has_paid
+  // Clean up any legacy `?payment_return=…` query params left over from the
+  // deprecated PhonePe flow so the URL doesn't leak a redirect marker.
   useEffect(() => {
-    if (skipOptionalBackendIntegrations()) return
-    if (typeof window === "undefined" || !user) return
+    if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
-    const paymentReturn = params.get("payment_return")
-    const orderId = params.get("order_id")
-    if (paymentReturn !== "1" || !orderId) return
-    let cancelled = false
-    getIdToken().then((t) => {
-      if (cancelled || !t) return
-      fetch(getBackendUrl("/api/payments/phonepe/confirm"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
-        body: JSON.stringify({ merchant_order_id: orderId }),
-      })
-        .then(() => {
-          if (cancelled) return
-          return fetch(getBackendUrl("/api/me"), { headers: { Authorization: `Bearer ${t}` } })
-        })
-        .then((res) => (res?.ok ? res.json() : null))
-        .then((data) => {
-          if (!cancelled) console.log("[Clairvyn] /api/me user details (after payment):", data)
-          if (!cancelled && data && typeof data.has_paid === "boolean") setHasPaid(data.has_paid)
-          if (!cancelled) {
-            const backendPhoto = getProfileImageFromMe(data)
-            console.log("[Clairvyn] resolved sidebar profile image (after payment):", backendPhoto ?? user.photoURL ?? null)
-            setProfileImageUrl(backendPhoto ?? user.photoURL ?? null)
-          }
-        })
-        .catch(() => {})
-    })
-    window.history.replaceState({}, "", "/chatbot")
-    return () => { cancelled = true }
-  }, [user, getIdToken])
+    if (params.get("payment_return")) {
+      window.history.replaceState({}, "", "/chatbot")
+    }
+  }, [])
 
   useEffect(() => {
     if (!user) {

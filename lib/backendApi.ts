@@ -147,6 +147,7 @@ export async function apiFetch<TResponse, TBody = unknown>(
       signal,
     })
   } catch (e) {
+    const networkMessage = String((e as Error)?.message ?? e)
     const ms = typeof performance !== "undefined" ? Math.round(performance.now() - t0) : undefined
     postBridgeClientEvent({
       kind: "apiFetch",
@@ -155,9 +156,13 @@ export async function apiFetch<TResponse, TBody = unknown>(
       method,
       requestId,
       ok: false,
-      networkError: String((e as Error)?.message ?? e),
+      networkError: networkMessage,
       ms,
     })
+    // Safari/iOS often reports plain "Load failed" for CORS/network failures.
+    if (/^load failed$/i.test(networkMessage.trim())) {
+      throw new Error("Failed to fetch")
+    }
     throw e
   }
 
