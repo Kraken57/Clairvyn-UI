@@ -490,6 +490,8 @@ export default function ChatbotClient() {
   const [backendChatId, setBackendChatId] = useState<string | null>(null)
   const [showGuestBanner, setShowGuestBanner] = useState(true)
   const [hasStarted, setHasStarted] = useState(false)
+  /** True while auth + session restore is in progress — prevents flash of empty chat screen. */
+  const [isInitializing, setIsInitializing] = useState(true)
   const [profileDisplayName, setProfileDisplayName] = useState("")
   /** Latest messages for initChat race guard (async init must not clobber an in-flight send). */
   const messagesRef = useRef<ChatMessage[]>([])
@@ -561,7 +563,7 @@ export default function ChatbotClient() {
   }
 
   useEffect(() => {
-    if (!isTurnInFlight) return
+    if (!showAssistantLoader) return
 
     const start = Date.now()
     const lastPhaseRef = { current: 0 }
@@ -609,6 +611,7 @@ export default function ChatbotClient() {
   useEffect(() => {
     console.log("[Clairvyn] init effect", { hasUser: !!user, currentChatId, authLoading });
     if (!user || authLoading) return
+    setIsInitializing(true)
 
     initGenerationRef.current += 1
     const gen = initGenerationRef.current
@@ -769,7 +772,7 @@ export default function ChatbotClient() {
           setLastActiveChatId(uid, targetId)
         }
       }
-      initChat()
+      initChat().finally(() => setIsInitializing(false))
       return () => {
         cancelled = true
       }
@@ -1918,7 +1921,15 @@ export default function ChatbotClient() {
           </header>
 
         {/* Chat area — centered when empty, messages + bottom-docked input when started */}
-        {!hasStarted ? (
+        {isInitializing ? (
+          /* Skeleton placeholder while auth + chat session restores — prevents flash of empty "new chat" screen */
+          <div className="flex-1 flex items-center justify-center">
+            <div className="animate-pulse flex flex-col items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700" />
+              <div className="w-48 h-4 rounded bg-gray-200 dark:bg-gray-700" />
+            </div>
+          </div>
+        ) : !hasStarted ? (
           <motion.div
             className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 gap-5 sm:gap-10 pb-[12vh]"
             initial={{ opacity: 0 }}
