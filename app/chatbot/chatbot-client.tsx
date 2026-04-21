@@ -503,8 +503,7 @@ export default function ChatbotClient() {
     !isLoading &&
     hasStarted &&
     messages.length > 0 &&
-    messages[messages.length - 1]?.role === "user" &&
-    !messages.some((m) => m.role === "assistant")
+    messages[messages.length - 1]?.role === "user"
   const showAssistantLoader = isLoading || inferredPendingAssistant
 
   // Chat history state (integrated into sidebar)
@@ -604,7 +603,7 @@ export default function ChatbotClient() {
       cancelled = true
       clearTimeout(timeoutId)
     }
-  }, [isTurnInFlight])
+  }, [showAssistantLoader])
 
   // Load sessions once per auth user. `/chatbot` = new conversation (no auto-restore). `/chatbot/:id` = that thread.
   useEffect(() => {
