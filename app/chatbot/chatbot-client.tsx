@@ -54,7 +54,7 @@ import { WaitlistModal } from "@/components/WaitlistModal"
 import { UserProfileModal } from "@/components/UserProfileModal"
 import { GreetingMessage } from "@/components/GreetingMessage"
 
-/** Shown while waiting for an assistant turn; phases follow elapsed time; line changes every 20–30s. */
+/** Shown while waiting for an assistant turn; phases follow elapsed time; line changes every 4–6s. */
 const ASSISTANT_STATUS_PHASES: readonly (readonly string[])[] = [
   [
     "Interpreting your requirements",
@@ -578,7 +578,7 @@ export default function ChatbotClient() {
     let cancelled = false
 
     const schedule = () => {
-      const delayMs = 20_000 + Math.random() * 10_000
+      const delayMs = 4_000 + Math.random() * 2_000
       timeoutId = setTimeout(() => {
         if (cancelled) return
         applyNextLine()
@@ -2190,7 +2190,7 @@ export default function ChatbotClient() {
 
                     <AnimatePresence mode="wait">
                       <motion.span
-                        key={queuePosition > 0 ? `queue-${queuePosition}` : (isLoading ? assistantStatusLine : "inferred-pending")}
+                        key={queuePosition > 0 ? `queue-${queuePosition}` : assistantStatusLine}
                         initial={{ opacity: 0, x: -8 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 8 }}
@@ -2199,9 +2199,7 @@ export default function ChatbotClient() {
                       >
                         {queuePosition > 0
                           ? `Many users are generating right now — you're #${queuePosition} in line. Your floor plan will be ready in a few minutes, even if you close this tab.`
-                          : isLoading
-                            ? assistantStatusLine
-                            : "Interpreting your requirements..."}
+                          : assistantStatusLine}
                       </motion.span>
                     </AnimatePresence>
                   </div>
