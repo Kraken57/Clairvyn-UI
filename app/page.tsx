@@ -190,10 +190,10 @@ export default function HomePage() {
               <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-600 touch:mb-4 touch:text-[11px] desktop:mb-4 desktop:text-xs desktop:tracking-widest">
                 DESIGN SMARTER, NOT HARDER
               </div>
-              <h1 className="font-extrabold tracking-tight text-[#1A1040] touch:text-[1.65rem] touch:leading-snug desktop:text-5xl desktop:leading-tight desktop:lg:text-6xl">
-                Design Architectural <br className="hidden desktop:block" />
-                Floor Plans Using <br className="hidden desktop:block" />
-                Simple Prompts.
+              <h1 className="font-extrabold tracking-tight text-[#1A1040] touch:text-[2.15rem] touch:leading-[1.2] desktop:text-[3.25rem] desktop:leading-[1.15] desktop:lg:text-[4rem] desktop:lg:leading-[1.1]">
+                Design architectural <br />
+                floor plans using <br />
+                simple prompts.
               </h1>
               <div className="mt-8 touch:mt-10">
                 <button
@@ -387,12 +387,10 @@ export default function HomePage() {
           {/* Badges */}
           <div className="mt-8 flex flex-col items-center touch:mt-10 desktop:mt-12">
             <h3 className="mb-4 text-lg font-semibold text-gray-700">Backed By</h3>
-            <div className="flex w-full max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-6 py-2 touch:gap-x-3 touch:gap-y-5 desktop:flex-nowrap desktop:gap-8">
-              <img src="/nvidia-inception.png" alt="NVIDIA Inception" className="h-14 max-h-16 w-auto max-w-[min(200px,42vw)] object-contain desktop:h-20 desktop:max-w-[200px]" />
-              <img src="/aws-activate.png" alt="AWS Activate" className="h-14 max-h-16 w-auto max-w-[min(200px,42vw)] object-contain desktop:h-20 desktop:max-w-[200px]" />
-              <img src="/Microsoft-for-Startups.png" alt="Microsoft for Startups" className="h-14 max-h-16 w-auto max-w-[min(200px,42vw)] object-contain desktop:h-20 desktop:max-w-[200px]" />
-              <img src="/Amplitude.png" alt="Amplitude" className="h-14 max-h-16 w-auto max-w-[min(200px,42vw)] object-contain desktop:h-20 desktop:max-w-[200px]" />
-              <img src="/Auth0.svg.png" alt="Auth0" className="h-14 max-h-16 w-auto max-w-[min(200px,42vw)] object-contain desktop:h-20 desktop:max-w-[200px]" />
+            <div className="flex w-full max-w-full flex-wrap items-center justify-center gap-x-8 gap-y-6 py-2 touch:gap-x-6 touch:gap-y-6 desktop:flex-nowrap desktop:gap-12">
+              <img src="/nvidia-inception.png" alt="NVIDIA Inception" className="h-10 w-auto object-contain touch:h-10 desktop:h-14" />
+              <img src="/aws-activate.png" alt="AWS Activate" className="h-10 w-auto object-contain touch:h-10 desktop:h-14" />
+              <img src="/zoho-startups.png" alt="Zoho for Startups" className="h-10 w-auto object-contain touch:h-10 desktop:h-14" />
             </div>
           </div>
 
