@@ -1177,7 +1177,7 @@ export default function ChatbotClient() {
         let terminalPoll: any = null;
         for (let poll = 1; poll <= MAX_POLLS; poll++) {
           const pollData = await apiFetch<any>(
-            `${apiPath.chatTask(resolvedChatId, taskId)}?_t=${Date.now()}`,
+            apiPath.chatTask(resolvedChatId, taskId),
             { method: "GET", token: token ?? null }
           );
           if (pollData.queue_position != null) {

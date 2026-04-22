@@ -307,7 +307,6 @@ export default function HomePage() {
                                   alt={heroSlides[slideIdx].alt}
                                   fill
                                   priority={stackPos === 0}
-                                  unoptimized
                                   className="object-cover"
                                   style={{ objectPosition: heroSlides[slideIdx].objectPosition }}
                                 />
