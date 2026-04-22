@@ -50,9 +50,9 @@ export default function HomePage() {
   }, [router])
 
   const heroSlides = [
-    { src: "/landing/landing_2.png", alt: "Clairvyn editor preview", objectPosition: "50% 45%" },
-    { src: "/landing/landing_1.png", alt: "Clairvyn editor preview", objectPosition: "55% 20%" },
-    { src: "/landing/landing_3.png", alt: "Clairvyn editor preview", objectPosition: "75% 55%" },
+    { src: "/landing/landing_1.png", alt: "Clairvyn Chat Interface", objectPosition: "center" },
+    { src: "/landing/landing_2.png", alt: "Clairvyn Generation Process", objectPosition: "center" },
+    { src: "/landing/landing_3.png", alt: "Clairvyn 2D Editor Viewer", objectPosition: "center" },
   ] as const
 
   useEffect(() => {
@@ -307,6 +307,7 @@ export default function HomePage() {
                                   alt={heroSlides[slideIdx].alt}
                                   fill
                                   priority={stackPos === 0}
+                                  unoptimized
                                   className="object-cover"
                                   style={{ objectPosition: heroSlides[slideIdx].objectPosition }}
                                 />
